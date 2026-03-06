@@ -108,6 +108,10 @@ http://127.0.0.1:19090/kline?stocks=YF.GC%3DF,YF.SI%3DF
 When a Yahoo raw symbol contains reserved URL characters such as `=`, encode the query value when
 writing the URL manually. The frontend already does this automatically for API requests.
 
+Example page for `YF.GC=F,YF.SI=F`:
+
+![Gold and Silver example](docs/images/yf-gc-si.png)
+
 Start server on a different port:
 
 ```bash
