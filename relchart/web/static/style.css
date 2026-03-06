@@ -1,0 +1,138 @@
+:root {
+  --bg: #f5f1e8;
+  --panel: #fffdf8;
+  --ink: #171717;
+  --muted: #6b7280;
+  --line: #ddd4c4;
+  --warning-bg: #fff4d6;
+  --warning-line: #e0b44c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(200, 155, 60, 0.16), transparent 30%),
+    linear-gradient(180deg, #f8f4ec 0%, var(--bg) 100%);
+  color: var(--ink);
+  font-family: "Georgia", "Times New Roman", serif;
+}
+
+.shell {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 28px 18px 22px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 46px);
+  line-height: 1;
+  font-weight: 600;
+}
+
+.meta {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  justify-content: flex-end;
+  max-width: 520px;
+  padding-top: 10px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #374151;
+}
+
+.legend-text {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.legend-label {
+  line-height: 1.1;
+}
+
+.legend-code {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Consolas, monospace;
+}
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.warnings {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.warning-item {
+  background: var(--warning-bg);
+  border-left: 4px solid var(--warning-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #6a4d06;
+  font-size: 14px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  background: rgba(255, 253, 248, 0.92);
+  border-radius: 22px;
+  box-shadow: 0 18px 50px rgba(67, 52, 16, 0.08);
+  overflow: hidden;
+}
+
+.chart {
+  width: 100%;
+  min-height: 76vh;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    padding: 18px 12px;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .legend {
+    justify-content: flex-start;
+    max-width: none;
+    padding-top: 0;
+  }
+
+  .chart {
+    min-height: 68vh;
+  }
+}
