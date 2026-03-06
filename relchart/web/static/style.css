@@ -30,9 +30,14 @@ body {
 .header {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
   align-items: flex-start;
   margin-bottom: 18px;
+}
+
+.header > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 h1 {
@@ -49,30 +54,33 @@ h1 {
 }
 
 .legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 14px;
-  justify-content: flex-end;
-  max-width: 520px;
-  padding-top: 10px;
+  display: grid;
+  gap: 10px;
+  width: min(300px, 100%);
+  flex: 0 0 300px;
+  justify-items: stretch;
+  padding: 10px 0 0 16px;
 }
 
 .legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 8px;
   font-size: 13px;
   color: #374151;
 }
 
 .legend-text {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .legend-label {
   line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .legend-code {
@@ -80,6 +88,7 @@ h1 {
   font-size: 11px;
   line-height: 1;
   font-family: ui-monospace, "SFMono-Regular", "SF Mono", Consolas, monospace;
+  overflow-wrap: anywhere;
 }
 
 .legend-swatch {
@@ -127,9 +136,9 @@ h1 {
   }
 
   .legend {
-    justify-content: flex-start;
-    max-width: none;
-    padding-top: 0;
+    width: 100%;
+    flex-basis: auto;
+    padding: 0;
   }
 
   .chart {
