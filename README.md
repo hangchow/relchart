@@ -108,9 +108,9 @@ Open one ratio line:
 
 Compare ratio lines:
 
-[`http://127.0.0.1:19090/kline?stocks=YF.GC=F/YF.SI=F,YF.GC=F/YF.HG=F`](http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF,YF.GC%3DF%2FYF.HG%3DF)
+[`http://127.0.0.1:19090/kline?stocks=YF.GC=F/YF.SI=F,YF.GC=F/YF.HG=F,YF.GC=F/YF.ALI=F`](http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF,YF.GC%3DF%2FYF.HG%3DF,YF.GC%3DF%2FYF.ALI%3DF)
 
-![Ratio line comparison](docs/images/ratio-gc-si-hg.png)
+![Ratio line comparison](docs/images/ratio-gc-si-hg-ali.png)
 
 Open a mixed chart with candlesticks and a ratio line:
 
