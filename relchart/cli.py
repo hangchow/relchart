@@ -32,11 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=19090,
         help="web server port, default 19090",
     )
-    parser.add_argument(
-        "--repair-history",
-        action="store_true",
-        help="re-fetch historical window months even when files already exist",
-    )
     return parser
 
 
@@ -50,7 +45,6 @@ def main(argv: list[str] | None = None) -> int:
         data_dir=Path(args.data_dir).expanduser().resolve(),
         web_host=args.web_host,
         web_port=args.web_port,
-        repair_history=args.repair_history,
     )
 
     app = create_app(config)

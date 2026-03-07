@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import AppConfig
 from .models import DailyBar
 from .providers import YahooProvider
-from .storage import FileStorage, merge_bars
+from .storage import FileStorage
 from .symbols import StockSymbol, parse_symbols
 from .transform import color_for_symbol, to_percent_bars
 from .web.routes import register_routes
@@ -100,20 +100,32 @@ class RelChartService:
         warnings: list[str],
         context: RequestContext,
     ) -> None:
-        historical_months = [month for month in window.months if not month.is_current]
-        for month in historical_months:
-            file_exists = self.storage.month_exists(symbol, month.key)
-            if file_exists and not self.config.repair_history:
+        for month in window.months:
+            if self.storage.month_exists(symbol, month.key):
                 continue
+
+            fetch_end = month.end_date
+            if month.is_current:
+                cutoff = self.provider.last_completed_trading_day(symbol)
+                if cutoff is None or cutoff < month.start_date:
+                    logger.info("%s: no completed trading day in current month yet", symbol.canonical)
+                    continue
+                fetch_end = min(cutoff, window.end_date)
 
             bars = self._fetch_daily_bars(
                 symbol,
                 month.start_date,
-                month.end_date,
+                fetch_end,
                 context,
-                reason=f"historical month {month.key}",
+                reason=f"missing month file {month.key}",
             )
-            if self._is_complete_historical_month(symbol, month.start_date, month.end_date, bars):
+            if month.is_current:
+                if bars:
+                    self.storage.write_month_file(symbol, month.key, bars)
+                    context.month_cache[(symbol.canonical, month.key)] = bars
+                continue
+
+            if self._is_complete_historical_month(symbol, month.start_date, fetch_end, bars):
                 self.storage.write_month_file(symbol, month.key, bars)
                 context.month_cache[(symbol.canonical, month.key)] = bars
                 continue
@@ -121,60 +133,6 @@ class RelChartService:
             warnings.append(
                 f"{symbol.canonical}: skipped writing incomplete historical month {month.key}"
             )
-
-        current_month = next(month for month in window.months if month.is_current)
-        cutoff = self.provider.last_completed_trading_day(symbol)
-        if cutoff is None or cutoff < current_month.start_date:
-            logger.info("%s: no completed trading day in current month yet", symbol.canonical)
-            return
-
-        fetch_end = min(cutoff, window.end_date)
-        existing = self._read_month_file(
-            symbol,
-            current_month.key,
-            context,
-            reason="current-month cache check",
-        )
-        expected_days = self.provider.fetch_trading_days(
-            symbol,
-            current_month.start_date,
-            fetch_end,
-        )
-        local_days = {bar.date for bar in existing if current_month.start_date <= bar.date <= fetch_end}
-        missing_days = [trading_day for trading_day in expected_days if trading_day not in local_days]
-
-        if not missing_days:
-            logger.info(
-                "%s: current-month cache already complete through %s, skip remote fetch",
-                symbol.canonical,
-                fetch_end,
-            )
-            return
-
-        fetch_start = missing_days[0]
-        fetched = self._fetch_daily_bars(
-            symbol,
-            fetch_start,
-            fetch_end,
-            context,
-            reason=(
-                f"current month refresh missing_days={len(missing_days)} "
-                f"from={fetch_start} to={fetch_end}"
-            ),
-        )
-        merged = [bar for bar in merge_bars(existing, fetched) if bar.date <= fetch_end]
-        if fetched and merged:
-            self.storage.write_month_file(symbol, current_month.key, merged)
-            context.month_cache[(symbol.canonical, current_month.key)] = merged
-            return
-
-        if existing:
-            warnings.append(
-                f"{symbol.canonical}: kept existing current-month cache because remote returned no bars"
-            )
-            return
-
-        warnings.append(f"{symbol.canonical}: no current-month data returned from Yahoo")
 
     def _is_complete_historical_month(
         self,

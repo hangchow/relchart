@@ -10,5 +10,4 @@ class AppConfig:
     data_dir: Path
     web_host: str
     web_port: int
-    repair_history: bool = False
     today: date | None = None
