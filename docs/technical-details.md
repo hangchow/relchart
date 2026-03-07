@@ -1,25 +1,23 @@
-# Technical Details
+英文原文：[technical-details_en.md](./technical-details_en.md)
 
-This document collects implementation-oriented details that are intentionally kept out of the main
-README.
+# 技术细节
 
-## Runtime Behavior
+本文收集了一些偏实现层面的细节，这些内容刻意没有放进主 README。
 
-- Server startup itself does not fetch any market data
-- Chart page/API access only reads local month files; if a required month file is missing,
-  relchart downloads it, writes it, then reads it from disk
-- Fixed window only: previous 3 full natural months plus current month to the latest completed
-  trading day
-- Browser time-range controls are intentionally disabled
-- Y-axis is percentage, not raw price
-- For each symbol, cache files are written as one file per month
-- Historical months are only written if the fetched month is complete
-- Current month file is written once for the latest completed trading day range available at first
-  fetch
+## 运行时行为
 
-## Cache Layout
+- 服务启动本身不会抓取任何市场数据
+- 图表页面/API 访问只会读取本地月文件；如果缺少所需月份，relchart 会先下载、写入，再从磁盘读回
+- 仅支持固定窗口：前 3 个完整自然月 + 当前月到最近一个已完成交易日
+- 浏览器中的时间范围控制被有意关闭
+- Y 轴展示百分比，而不是原始价格
+- 每个 symbol 的缓存文件按“每月一个文件”写入
+- 历史月份只有在该月数据完整时才会写入
+- 当前月文件会在首次抓取时，按当时可获得的“最近一个已完成交易日”范围写入一次
 
-Example:
+## 缓存目录结构
+
+示例：
 
 ```text
 .stocks/
@@ -32,16 +30,16 @@ Example:
     us.tsla_202512.txt
 ```
 
-## Cache File Format
+## 缓存文件格式
 
-Example:
+示例：
 
 ```text
 20260201 260 261 257 260.5
 20260202 260.5 263 255 262
 ```
 
-Columns:
+字段：
 
 - `date`
 - `open`
@@ -49,20 +47,17 @@ Columns:
 - `low`
 - `close`
 
-## HTTP Endpoints
+## HTTP 接口
 
-- `GET /`: empty shell page with usage hint
-- `GET /kline?stocks=...`: chart page for a comma-separated stock list, for example
-  `/kline?stocks=US.AAPL,US.TSLA`
-- `GET /api/chart-data?stocks=...`: chart snapshot used by the frontend
-- `GET /healthz`: basic health status
+- `GET /`：空白壳页面，带用法提示
+- `GET /kline?stocks=...`：用于展示逗号分隔股票列表的图表页面，例如 `/kline?stocks=US.AAPL,US.TSLA`
+- `GET /api/chart-data?stocks=...`：前端使用的图表快照接口
+- `GET /healthz`：基础健康检查
 
-## Notes
+## 说明
 
-- Frontend uses local Plotly assets under `relchart/web/static/`
-- No Node.js build step is required
-- `requirements.txt` includes `scipy`, so Yahoo price repair should be enabled by default after a
-  normal install
-- First request for a chart page can take longer because missing monthly cache files must be fetched
-- Request logs include per-file local read timing, per-remote-call timing, and per-page aggregate
-  timing
+- 前端使用 `relchart/web/static/` 下的本地 Plotly 静态资源
+- 不需要 Node.js 构建步骤
+- `requirements.txt` 包含 `scipy`，因此正常安装后应默认启用 Yahoo 价格修复能力
+- 图表页面的第一次请求可能更慢，因为需要抓取缺失的月度缓存文件
+- 请求日志会记录单文件本地读取耗时、单次远程调用耗时，以及整页总耗时
