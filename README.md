@@ -8,6 +8,7 @@ Relative daily K-line overlay web tool.
 
 - Currently uses public Yahoo Finance daily bars through `yfinance`
 - Supports `US.*`, `HK.*`, and `YF.*` symbol inputs
+- Supports ratio items in `<symbol>/<symbol>` form, such as `YF.GC=F/YF.SI=F`
 - Does not depend on Futu OpenD
 - Requires outbound internet access when a month file is missing
 - Data fetch is triggered by page/API access, not by server startup
@@ -43,6 +44,9 @@ aligned to Yahoo's current daily-bar behavior and use an `XNYS`-style completed-
 common `=X`, `-USD`, `=F`, and `^...` forms also have built-in heuristics.
 When Yahoo returns a `shortName`, relchart uses that English display name in the page title,
 legend, and hover labels, while still showing the original symbol as secondary text.
+
+Ratio items use `<symbol>/<symbol>` syntax. They are rendered as line traces based on daily close
+ratios and can be mixed with regular candlestick symbols in the same `stocks` query.
 
 ## Quick Start
 
@@ -84,15 +88,15 @@ http://127.0.0.1:19090/kline?stocks=HK.700
 
 `HK.700` is normalized to canonical `HK.00700` and renders a single-symbol daily K chart.
 
-Example page for `HK.700`:
-
 ![Single HK stock example](docs/images/hk-700-single.png)
 
 Compare stocks:
 
 ```text
-http://127.0.0.1:19090/kline?stocks=HK.00700,US.MSTF
+http://127.0.0.1:19090/kline?stocks=HK.00700,US.MSFT
 ```
+
+![HK and US stock comparison](docs/images/hk-700-msft.png)
 
 Open Yahoo raw symbols:
 
@@ -100,12 +104,34 @@ Open Yahoo raw symbols:
 http://127.0.0.1:19090/kline?stocks=YF.GC%3DF,YF.SI%3DF
 ```
 
+![Gold and Silver example](docs/images/yf-gc-si.png)
+
+Open one ratio line:
+
+```text
+http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF
+```
+
+![Gold and Silver ratio line](docs/images/ratio-gc-si-only.png)
+
+Compare ratio lines:
+
+```text
+http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF,YF.GC%3DF%2FYF.HG%3DF
+```
+
+![Ratio line comparison](docs/images/ratio-gc-si-hg.png)
+
+Open a mixed chart with candlesticks and a ratio line:
+
+```text
+http://127.0.0.1:19090/kline?stocks=US.MSFT,YF.GC%3DF%2FYF.SI%3DF
+```
+
+![Mixed candlestick and ratio example](docs/images/ratio-gc-si-msft.png)
+
 When a Yahoo raw symbol contains reserved URL characters such as `=`, encode the query value when
 writing the URL manually. The frontend already does this automatically for API requests.
-
-Example page for `YF.GC=F,YF.SI=F`:
-
-![Gold and Silver example](docs/images/yf-gc-si.png)
 
 ## Learn More
 

@@ -13,8 +13,8 @@ from .config import AppConfig
 from .models import DailyBar
 from .providers import YahooProvider
 from .storage import FileStorage
-from .symbols import StockSymbol, parse_symbols
-from .transform import color_for_symbol, to_percent_bars
+from .symbols import RatioSymbol, StockSymbol, parse_request_items
+from .transform import assign_distinct_colors, to_percent_bars, to_percent_line_points
 from .web.routes import register_routes
 from .window import build_window
 
@@ -51,7 +51,8 @@ class RelChartService:
         self.storage = FileStorage(config.data_dir)
 
     def get_snapshot(self, stocks_arg: str) -> dict:
-        symbols = parse_symbols(stocks_arg)
+        items = parse_request_items(stocks_arg)
+        symbols = self._collect_symbols(items)
         today = self.config.today or date.today()
         window = build_window(today)
         warnings: list[str] = []
@@ -60,7 +61,7 @@ class RelChartService:
 
         logger.info(
             "chart request started stocks=%s window=%s..%s",
-            ",".join(symbol.canonical for symbol in symbols),
+            ",".join(item.canonical for item in items),
             window.start_date,
             window.end_date,
         )
@@ -68,7 +69,7 @@ class RelChartService:
         for symbol in symbols:
             self._sync_symbol(symbol, window, warnings, context)
 
-        snapshot = self._build_snapshot(window, symbols, warnings, context)
+        snapshot = self._build_snapshot(window, items, warnings, context)
         elapsed = perf_counter() - started
         for index, event in enumerate(context.metrics.remote_events, start=1):
             logger.info(
@@ -84,7 +85,7 @@ class RelChartService:
         logger.info(
             "chart request finished stocks=%s total_ms=%.2f local_read_ms=%.2f "
             "local_reads=%d remote_ms=%.2f remote_requests=%d",
-            ",".join(symbol.canonical for symbol in symbols),
+            ",".join(item.canonical for item in items),
             elapsed * 1000.0,
             context.metrics.local_read_seconds * 1000.0,
             context.metrics.local_reads,
@@ -92,6 +93,19 @@ class RelChartService:
             context.metrics.remote_requests,
         )
         return snapshot
+
+    def _collect_symbols(
+        self,
+        items: list[StockSymbol | RatioSymbol],
+    ) -> list[StockSymbol]:
+        symbols_by_canonical: dict[str, StockSymbol] = {}
+        for item in items:
+            if isinstance(item, RatioSymbol):
+                symbols_by_canonical.setdefault(item.numerator.canonical, item.numerator)
+                symbols_by_canonical.setdefault(item.denominator.canonical, item.denominator)
+                continue
+            symbols_by_canonical.setdefault(item.canonical, item)
+        return list(symbols_by_canonical.values())
 
     def _sync_symbol(
         self,
@@ -150,7 +164,7 @@ class RelChartService:
     def _build_snapshot(
         self,
         window,
-        symbols: list[StockSymbol],
+        items: list[StockSymbol | RatioSymbol],
         warnings: list[str],
         context: RequestContext,
     ) -> dict:
@@ -158,48 +172,32 @@ class RelChartService:
         month_keys = [month.key for month in window.months]
         snapshot_warnings = list(warnings)
 
-        for symbol in symbols:
-            bars = self._read_window_bars(symbol, month_keys, context)
-            if not bars:
-                snapshot_warnings.append(
-                    f"{symbol.canonical}: no cached data in requested window"
+        for item in items:
+            if isinstance(item, RatioSymbol):
+                ratio_series = self._build_ratio_series(
+                    item,
+                    window.start_date,
+                    month_keys,
+                    snapshot_warnings,
+                    context,
                 )
+                if ratio_series is not None:
+                    series.append(ratio_series)
                 continue
 
-            display_name = symbol.canonical
-            if symbol.market == "YF":
-                fetched_name = self._fetch_display_name(
-                    symbol,
-                    context,
-                    reason=f"display name for {symbol.canonical}",
-                )
-                if fetched_name:
-                    display_name = fetched_name
-
-            base_close = self._find_previous_close_in_cache(symbol, window.start_date, context)
-            if base_close is None:
-                base_close = self._fetch_previous_close(
-                    symbol,
-                    window.start_date,
-                    context,
-                    reason=f"base close before {window.start_date}",
-                )
-            if base_close is None:
-                base_close = bars[0].open
-                snapshot_warnings.append(
-                    f"{symbol.canonical}: previous close unavailable, fell back to first visible open"
-                )
-
-            series.append(
-                {
-                    "symbol": symbol.canonical,
-                    "display_name": display_name,
-                    "market": symbol.market,
-                    "color": color_for_symbol(symbol.canonical),
-                    "base_close": round(base_close, 4),
-                    "bars": to_percent_bars(bars, base_close),
-                }
+            symbol_series = self._build_symbol_series(
+                item,
+                window.start_date,
+                month_keys,
+                snapshot_warnings,
+                context,
             )
+            if symbol_series is not None:
+                series.append(symbol_series)
+
+        colors = assign_distinct_colors([item["symbol"] for item in series])
+        for item in series:
+            item["color"] = colors[item["symbol"]]
 
         return {
             "title": "Relative Daily K Overlay",
@@ -208,10 +206,160 @@ class RelChartService:
                 "start": window.start_date.isoformat(),
                 "end": window.end_date.isoformat(),
             },
-            "requested_symbols": [symbol.canonical for symbol in symbols],
+            "requested_symbols": [item.canonical for item in items],
             "series": series,
             "warnings": snapshot_warnings,
         }
+
+    def _build_symbol_series(
+        self,
+        symbol: StockSymbol,
+        window_start: date,
+        month_keys: list[str],
+        warnings: list[str],
+        context: RequestContext,
+    ) -> dict | None:
+        bars = self._read_window_bars(symbol, month_keys, context)
+        if not bars:
+            warnings.append(
+                f"{symbol.canonical}: no cached data in requested window"
+            )
+            return None
+
+        display_name = self._display_name_for_symbol(
+            symbol,
+            context,
+            reason=f"display name for {symbol.canonical}",
+        )
+
+        base_close = self._find_previous_close_in_cache(symbol, window_start, context)
+        if base_close is None:
+            base_close = self._fetch_previous_close(
+                symbol,
+                window_start,
+                context,
+                reason=f"base close before {window_start}",
+            )
+        if base_close is None:
+            base_close = bars[0].open
+            warnings.append(
+                f"{symbol.canonical}: previous close unavailable, fell back to first visible open"
+            )
+
+        return {
+            "symbol": symbol.canonical,
+            "display_name": display_name,
+            "market": symbol.market,
+            "series_type": "candlestick",
+            "base_close": round(base_close, 4),
+            "bars": to_percent_bars(bars, base_close),
+        }
+
+    def _build_ratio_series(
+        self,
+        ratio: RatioSymbol,
+        window_start: date,
+        month_keys: list[str],
+        warnings: list[str],
+        context: RequestContext,
+    ) -> dict | None:
+        numerator_bars = self._read_window_bars(ratio.numerator, month_keys, context)
+        denominator_bars = self._read_window_bars(ratio.denominator, month_keys, context)
+        if not numerator_bars:
+            warnings.append(
+                f"{ratio.numerator.canonical}: no cached data in requested window for ratio {ratio.canonical}"
+            )
+            return None
+        if not denominator_bars:
+            warnings.append(
+                f"{ratio.denominator.canonical}: no cached data in requested window for ratio {ratio.canonical}"
+            )
+            return None
+
+        numerator_by_date = {bar.date: bar for bar in numerator_bars}
+        denominator_by_date = {bar.date: bar for bar in denominator_bars}
+        shared_dates = sorted(set(numerator_by_date) & set(denominator_by_date))
+        if not shared_dates:
+            warnings.append(f"{ratio.canonical}: no overlapping trading dates in requested window")
+            return None
+
+        ratio_values = [
+            (
+                trading_date.isoformat(),
+                numerator_by_date[trading_date].close / denominator_by_date[trading_date].close,
+            )
+            for trading_date in shared_dates
+        ]
+
+        base_value = self._find_ratio_base_value(ratio, window_start, context)
+        if base_value is None:
+            base_value = ratio_values[0][1]
+            warnings.append(
+                f"{ratio.canonical}: previous ratio close unavailable, fell back to first visible close"
+            )
+
+        numerator_name = self._display_name_for_symbol(
+            ratio.numerator,
+            context,
+            reason=f"display name for {ratio.numerator.canonical}",
+        )
+        denominator_name = self._display_name_for_symbol(
+            ratio.denominator,
+            context,
+            reason=f"display name for {ratio.denominator.canonical}",
+        )
+        display_name = f"{numerator_name} / {denominator_name}"
+
+        return {
+            "symbol": ratio.canonical,
+            "display_name": display_name,
+            "market": "RATIO",
+            "series_type": "line",
+            "points": to_percent_line_points(ratio_values, base_value),
+        }
+
+    def _display_name_for_symbol(
+        self,
+        symbol: StockSymbol,
+        context: RequestContext,
+        reason: str,
+    ) -> str:
+        display_name = symbol.canonical
+        if symbol.market != "YF":
+            return display_name
+
+        fetched_name = self._fetch_display_name(symbol, context, reason=reason)
+        if fetched_name:
+            return fetched_name
+        return display_name
+
+    def _find_ratio_base_value(
+        self,
+        ratio: RatioSymbol,
+        before_date: date,
+        context: RequestContext,
+    ) -> float | None:
+        numerator_close = self._find_previous_close_in_cache(ratio.numerator, before_date, context)
+        if numerator_close is None:
+            numerator_close = self._fetch_previous_close(
+                ratio.numerator,
+                before_date,
+                context,
+                reason=f"ratio base close before {before_date}",
+            )
+
+        denominator_close = self._find_previous_close_in_cache(ratio.denominator, before_date, context)
+        if denominator_close is None:
+            denominator_close = self._fetch_previous_close(
+                ratio.denominator,
+                before_date,
+                context,
+                reason=f"ratio base close before {before_date}",
+            )
+
+        if numerator_close is None or denominator_close is None:
+            return None
+        return numerator_close / denominator_close
 
     def _read_window_bars(
         self,

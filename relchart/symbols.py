@@ -21,6 +21,14 @@ class StockSymbol:
     calendar_name: str
 
 
+@dataclass(frozen=True)
+class RatioSymbol:
+    raw: str
+    numerator: StockSymbol
+    denominator: StockSymbol
+    canonical: str
+
+
 def parse_symbol(raw: str) -> StockSymbol:
     text = raw.strip().upper()
     if not text:
@@ -81,13 +89,34 @@ def parse_symbol(raw: str) -> StockSymbol:
     )
 
 
-def parse_symbols(raw: str) -> list[StockSymbol]:
-    symbols = [parse_symbol(part) for part in raw.split(",") if part.strip()]
-    if not symbols:
+def parse_request_item(raw: str) -> StockSymbol | RatioSymbol:
+    text = raw.strip()
+    if not text:
+        raise ValueError("empty stock code")
+    if "/" not in text:
+        return parse_symbol(text)
+
+    parts = [part.strip() for part in text.split("/")]
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"invalid ratio stock code: {raw}")
+
+    numerator = parse_symbol(parts[0])
+    denominator = parse_symbol(parts[1])
+    return RatioSymbol(
+        raw=raw,
+        numerator=numerator,
+        denominator=denominator,
+        canonical=f"{numerator.canonical}/{denominator.canonical}",
+    )
+
+
+def parse_request_items(raw: str) -> list[StockSymbol | RatioSymbol]:
+    items = [parse_request_item(part) for part in raw.split(",") if part.strip()]
+    if not items:
         raise ValueError("no valid stock codes provided")
-    if len(symbols) > MAX_SYMBOLS:
+    if len(items) > MAX_SYMBOLS:
         raise ValueError(f"at most {MAX_SYMBOLS} stocks are supported")
-    return symbols
+    return items
 
 
 def _calendar_name_for_yf_symbol(yahoo_symbol: str) -> str:

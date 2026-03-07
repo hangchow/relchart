@@ -45,40 +45,70 @@ function renderWarnings(warnings) {
 }
 
 function buildTraces(series) {
-  return series.map((item) => ({
-    type: "candlestick",
-    name: item.display_name || item.symbol,
-    x: item.bars.map((bar) => bar.time),
-    open: item.bars.map((bar) => bar.open),
-    high: item.bars.map((bar) => bar.high),
-    low: item.bars.map((bar) => bar.low),
-    close: item.bars.map((bar) => bar.close),
-    increasing: {
-      line: { color: item.color, width: 1.25 },
-      fillcolor: item.color,
-    },
-    decreasing: {
-      line: { color: item.color, width: 1.25 },
-      fillcolor: item.color,
-    },
-    whiskerwidth: 0.3,
-    opacity: 0.62,
-    hoverlabel: {
-      bgcolor: "rgba(255,255,255,0.96)",
-      bordercolor: item.color,
-      font: { color: "#0f172a", size: 12 },
-    },
-    hovertemplate: [
-      `<b>${item.display_name || item.symbol}</b>`,
-      item.display_name && item.display_name !== item.symbol ? item.symbol : null,
-      "Date %{x|%Y-%m-%d}",
-      "Open %{open:.2f}%",
-      "High %{high:.2f}%",
-      "Low %{low:.2f}%",
-      "Close %{close:.2f}%",
-      "<extra></extra>",
-    ].filter(Boolean).join("<br>"),
-  }));
+  return series.map((item) => {
+    if (item.series_type === "line") {
+      return {
+        type: "scatter",
+        mode: "lines",
+        name: item.display_name || item.symbol,
+        x: item.points.map((point) => point.time),
+        y: item.points.map((point) => point.value),
+        customdata: item.points.map((point) => point.raw_value),
+        line: {
+          color: item.color,
+          width: 2.5,
+        },
+        hoverlabel: {
+          bgcolor: "rgba(255,255,255,0.96)",
+          bordercolor: item.color,
+          font: { color: "#0f172a", size: 12 },
+        },
+        hovertemplate: [
+          `<b>${item.display_name || item.symbol}</b>`,
+          item.display_name && item.display_name !== item.symbol ? item.symbol : null,
+          "Date %{x|%Y-%m-%d}",
+          "Ratio %{customdata:.4f}",
+          "Change %{y:.2f}%",
+          "<extra></extra>",
+        ].filter(Boolean).join("<br>"),
+      };
+    }
+
+    return {
+      type: "candlestick",
+      name: item.display_name || item.symbol,
+      x: item.bars.map((bar) => bar.time),
+      open: item.bars.map((bar) => bar.open),
+      high: item.bars.map((bar) => bar.high),
+      low: item.bars.map((bar) => bar.low),
+      close: item.bars.map((bar) => bar.close),
+      increasing: {
+        line: { color: item.color, width: 1.25 },
+        fillcolor: item.color,
+      },
+      decreasing: {
+        line: { color: item.color, width: 1.25 },
+        fillcolor: item.color,
+      },
+      whiskerwidth: 0.3,
+      opacity: 0.62,
+      hoverlabel: {
+        bgcolor: "rgba(255,255,255,0.96)",
+        bordercolor: item.color,
+        font: { color: "#0f172a", size: 12 },
+      },
+      hovertemplate: [
+        `<b>${item.display_name || item.symbol}</b>`,
+        item.display_name && item.display_name !== item.symbol ? item.symbol : null,
+        "Date %{x|%Y-%m-%d}",
+        "Open %{open:.2f}%",
+        "High %{high:.2f}%",
+        "Low %{low:.2f}%",
+        "Close %{close:.2f}%",
+        "<extra></extra>",
+      ].filter(Boolean).join("<br>"),
+    };
+  });
 }
 
 function renderChart(snapshot) {
