@@ -26,9 +26,19 @@ Yahoo symbol mapping examples:
 
 - `US.AAPL -> AAPL`
 - `US.BRK.B -> BRK-B`
+- `HK.00700 -> 0700.HK`
+- `HK.700 -> 0700.HK` (normalized to canonical `HK.00700`)
 - `YF.GC=F -> GC=F`
 - `YF.SI=F -> SI=F`
-- HK input format is intentionally not fixed in README yet
+
+`HK.*` uses numeric HKEX codes, not name aliases. Use the exchange code after the `HK.` prefix
+and prefer the 5-digit canonical form:
+
+- Tencent: `HK.00700`, not `HK.TCH`
+- Alibaba-W: `HK.09988`
+
+For Yahoo Finance, relchart converts the canonical 5-digit HK code to a 4-digit `.HK` symbol
+by dropping one leading zero. Example: `HK.00700 -> 0700.HK`.
 
 `YF.*` is a raw Yahoo Finance passthrough prefix. It is useful for Yahoo-native symbols that are
 not plain stock tickers, such as:
@@ -97,6 +107,12 @@ Open multiple US stocks:
 
 ```text
 http://127.0.0.1:19090/kline?stocks=US.AAPL,US.TSLA
+```
+
+Open HK stocks:
+
+```text
+http://127.0.0.1:19090/kline?stocks=HK.00700,HK.09988
 ```
 
 Open Yahoo raw symbols:
@@ -189,6 +205,6 @@ Columns are:
 - `ModuleNotFoundError: fastapi` or `uvicorn` or `yfinance`: run `pip install -r requirements.txt`
 - Empty chart or request failure: check internet connectivity, stock code format, and the `stocks` query parameter in the URL
 - `YF.*` symbols are passed to Yahoo as-is; if Yahoo itself does not recognize the symbol, relchart cannot repair it locally
-- HK ticker format is intentionally omitted from README until the final input convention is confirmed
+- `HK.*` symbols must use numeric HKEX codes; for example, Tencent is `HK.00700`, not `HK.TCH`
 - Historical file suspected bad or incomplete: delete the specific month file and restart the program
 - Port already in use: change `--web_port`
