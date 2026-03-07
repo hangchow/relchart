@@ -82,9 +82,7 @@ You can also pass a single stock code and view a single-symbol daily K chart.
 
 Open one stock:
 
-```text
-http://127.0.0.1:19090/kline?stocks=HK.700
-```
+[`http://127.0.0.1:19090/kline?stocks=HK.700`](http://127.0.0.1:19090/kline?stocks=HK.700)
 
 `HK.700` is normalized to canonical `HK.00700` and renders a single-symbol daily K chart.
 
@@ -92,41 +90,31 @@ http://127.0.0.1:19090/kline?stocks=HK.700
 
 Compare stocks:
 
-```text
-http://127.0.0.1:19090/kline?stocks=HK.00700,US.MSFT
-```
+[`http://127.0.0.1:19090/kline?stocks=HK.00700,US.MSFT`](http://127.0.0.1:19090/kline?stocks=HK.00700,US.MSFT)
 
 ![HK and US stock comparison](docs/images/hk-700-msft.png)
 
 Open Yahoo raw symbols:
 
-```text
-http://127.0.0.1:19090/kline?stocks=YF.GC%3DF,YF.SI%3DF
-```
+[`http://127.0.0.1:19090/kline?stocks=YF.GC=F,YF.SI=F`](http://127.0.0.1:19090/kline?stocks=YF.GC%3DF,YF.SI%3DF)
 
 ![Gold and Silver example](docs/images/yf-gc-si.png)
 
 Open one ratio line:
 
-```text
-http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF
-```
+[`http://127.0.0.1:19090/kline?stocks=YF.GC=F/YF.SI=F`](http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF)
 
 ![Gold and Silver ratio line](docs/images/ratio-gc-si-only.png)
 
 Compare ratio lines:
 
-```text
-http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF,YF.GC%3DF%2FYF.HG%3DF
-```
+[`http://127.0.0.1:19090/kline?stocks=YF.GC=F/YF.SI=F,YF.GC=F/YF.HG=F`](http://127.0.0.1:19090/kline?stocks=YF.GC%3DF%2FYF.SI%3DF,YF.GC%3DF%2FYF.HG%3DF)
 
 ![Ratio line comparison](docs/images/ratio-gc-si-hg.png)
 
 Open a mixed chart with candlesticks and a ratio line:
 
-```text
-http://127.0.0.1:19090/kline?stocks=US.MSFT,YF.GC%3DF%2FYF.SI%3DF
-```
+[`http://127.0.0.1:19090/kline?stocks=US.MSFT,YF.GC=F/YF.SI=F`](http://127.0.0.1:19090/kline?stocks=US.MSFT,YF.GC%3DF%2FYF.SI%3DF)
 
 ![Mixed candlestick and ratio example](docs/images/ratio-gc-si-msft.png)
 

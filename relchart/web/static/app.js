@@ -49,7 +49,7 @@ function buildTraces(series) {
     if (item.series_type === "line") {
       return {
         type: "scatter",
-        mode: "lines",
+        mode: "lines+markers",
         name: item.display_name || item.symbol,
         x: item.points.map((point) => point.time),
         y: item.points.map((point) => point.value),
@@ -57,6 +57,11 @@ function buildTraces(series) {
         line: {
           color: item.color,
           width: 2.5,
+        },
+        marker: {
+          size: 10,
+          opacity: 0,
+          color: item.color,
         },
         hoverlabel: {
           bgcolor: "rgba(255,255,255,0.96)",
@@ -121,6 +126,7 @@ function renderChart(snapshot) {
     margin: { l: 72, r: 32, t: 24, b: 48 },
     showlegend: false,
     hovermode: "x unified",
+    hoverdistance: 40,
     dragmode: false,
     xaxis: {
       type: "date",
