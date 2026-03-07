@@ -76,6 +76,8 @@ Then open:
 http://127.0.0.1:19090/kline?stocks=US.AAPL,US.TSLA
 ```
 
+You can also pass a single stock code and view a single-symbol daily K chart.
+
 ## Command Syntax
 
 ```bash
@@ -102,6 +104,18 @@ Open one US stock:
 ```text
 http://127.0.0.1:19090/kline?stocks=US.AAPL
 ```
+
+Open one HK stock:
+
+```text
+http://127.0.0.1:19090/kline?stocks=HK.700
+```
+
+`HK.700` is normalized to canonical `HK.00700` and renders a single-symbol daily K chart.
+
+Example page for `HK.700`:
+
+![Single HK stock example](docs/images/hk-700-single.png)
 
 Open multiple US stocks:
 
