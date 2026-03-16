@@ -115,17 +115,14 @@ class RelChartService:
         context: RequestContext,
     ) -> None:
         for month in window.months:
+            if month.is_current:
+                self._sync_current_month(symbol, month, window.end_date, context)
+                continue
+
             if self.storage.month_exists(symbol, month.key):
                 continue
 
             fetch_end = month.end_date
-            if month.is_current:
-                cutoff = self.provider.last_completed_trading_day(symbol)
-                if cutoff is None or cutoff < month.start_date:
-                    logger.info("%s: no completed trading day in current month yet", symbol.canonical)
-                    continue
-                fetch_end = min(cutoff, window.end_date)
-
             bars = self._fetch_daily_bars(
                 symbol,
                 month.start_date,
@@ -133,12 +130,6 @@ class RelChartService:
                 context,
                 reason=f"missing month file {month.key}",
             )
-            if month.is_current:
-                if bars:
-                    self.storage.write_month_file(symbol, month.key, bars)
-                    context.month_cache[(symbol.canonical, month.key)] = bars
-                continue
-
             if self._is_complete_historical_month(symbol, month.start_date, fetch_end, bars):
                 self.storage.write_month_file(symbol, month.key, bars)
                 context.month_cache[(symbol.canonical, month.key)] = bars
@@ -147,6 +138,47 @@ class RelChartService:
             warnings.append(
                 f"{symbol.canonical}: skipped writing incomplete historical month {month.key}"
             )
+
+    def _sync_current_month(
+        self,
+        symbol: StockSymbol,
+        month,
+        window_end: date,
+        context: RequestContext,
+    ) -> None:
+        cutoff = self.provider.last_completed_trading_day(symbol)
+        if cutoff is None or cutoff < month.start_date:
+            logger.info("%s: no completed trading day in current month yet", symbol.canonical)
+            return
+
+        fetch_end = min(cutoff, window_end)
+        existing_bars = self._read_month_file(
+            symbol,
+            month.key,
+            context,
+            reason="current month freshness check",
+        )
+        if existing_bars and existing_bars[-1].date >= fetch_end:
+            logger.info(
+                "%s: current month cache up to date latest=%s cutoff=%s",
+                symbol.canonical,
+                existing_bars[-1].date,
+                fetch_end,
+            )
+            return
+
+        bars = self._fetch_daily_bars(
+            symbol,
+            month.start_date,
+            fetch_end,
+            context,
+            reason=f"refresh current month {month.key} through {fetch_end}",
+        )
+        if not bars:
+            return
+
+        self.storage.write_month_file(symbol, month.key, bars)
+        context.month_cache[(symbol.canonical, month.key)] = bars
 
     def _is_complete_historical_month(
         self,
