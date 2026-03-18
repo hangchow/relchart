@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
 import math
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import exchange_calendars as xcals
 import pandas as pd
@@ -101,6 +105,21 @@ class YahooProvider:
             return None
         return bars[-1].close
 
+    def fetch_provisional_daily_bar(self, symbol: StockSymbol) -> DailyBar | None:
+        cutoff = self.last_completed_trading_day(symbol)
+        if cutoff is None:
+            return None
+
+        try:
+            latest_bar = self._fetch_latest_chart_daily_bar(symbol)
+        except Exception:
+            logger.exception("yahoo provisional daily bar request failed symbol=%s", symbol.yahoo_symbol)
+            return None
+
+        if latest_bar is None or latest_bar.date <= cutoff:
+            return None
+        return latest_bar
+
     def fetch_display_name(self, symbol: StockSymbol) -> tuple[str | None, bool]:
         if symbol.yahoo_symbol in self._display_names:
             return self._display_names[symbol.yahoo_symbol], False
@@ -184,6 +203,29 @@ class YahooProvider:
             self._tickers[yahoo_symbol] = ticker
         return ticker
 
+    def _fetch_latest_chart_daily_bar(self, symbol: StockSymbol) -> DailyBar | None:
+        now_utc = datetime.now(timezone.utc)
+        params = urlencode(
+            {
+                "period1": int((now_utc - timedelta(days=10)).timestamp()),
+                "period2": int((now_utc + timedelta(days=1)).timestamp()),
+                "interval": "1d",
+                "includePrePost": "false",
+                "events": "div,splits",
+            }
+        )
+        url = (
+            "https://query2.finance.yahoo.com/v8/finance/chart/"
+            f"{quote(symbol.yahoo_symbol, safe='')}?{params}"
+        )
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=20) as response:
+            payload = json.load(response)
+
+        calendar = self._calendar(symbol)
+        fallback_timezone = getattr(calendar.tz, "key", str(calendar.tz))
+        return _latest_chart_daily_bar_from_payload(symbol, payload, fallback_timezone)
+
 
 def _to_date(value) -> date:
     if hasattr(value, "to_pydatetime"):
@@ -205,3 +247,80 @@ def _normalize_display_name(value) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _latest_chart_daily_bar_from_payload(
+    symbol: StockSymbol,
+    payload: dict,
+    fallback_timezone: str,
+) -> DailyBar | None:
+    chart = payload.get("chart") or {}
+    results = chart.get("result") or []
+    if not results:
+        return None
+
+    result = results[0]
+    meta = result.get("meta") or {}
+    timezone_name = meta.get("exchangeTimezoneName") or fallback_timezone or "UTC"
+    try:
+        market_tz = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        market_tz = ZoneInfo("UTC")
+
+    timestamps = result.get("timestamp") or []
+    indicators = result.get("indicators") or {}
+    quote_values = (indicators.get("quote") or [{}])[0]
+
+    latest_by_date: dict[date, tuple[int, DailyBar]] = {}
+    for index, raw_timestamp in enumerate(timestamps):
+        timestamp = int(raw_timestamp)
+        open_price = _safe_float_or_none(_value_at(quote_values.get("open"), index))
+        high_price = _safe_float_or_none(_value_at(quote_values.get("high"), index))
+        low_price = _safe_float_or_none(_value_at(quote_values.get("low"), index))
+        close_price = _safe_float_or_none(_value_at(quote_values.get("close"), index))
+        if None in {open_price, high_price, low_price, close_price}:
+            continue
+        assert open_price is not None
+        assert high_price is not None
+        assert low_price is not None
+        assert close_price is not None
+        if min(open_price, high_price, low_price, close_price) <= 0:
+            continue
+
+        bar_date = datetime.fromtimestamp(timestamp, tz=timezone.utc).astimezone(market_tz).date()
+        bar = DailyBar(
+            symbol=symbol.canonical,
+            date=bar_date,
+            open=open_price,
+            high=high_price,
+            low=low_price,
+            close=close_price,
+        )
+        previous = latest_by_date.get(bar_date)
+        if previous is None or timestamp > previous[0]:
+            latest_by_date[bar_date] = (timestamp, bar)
+
+    if not latest_by_date:
+        return None
+
+    _, latest_bar = max(
+        latest_by_date.values(),
+        key=lambda item: (item[1].date, item[0]),
+    )
+    return latest_bar
+
+
+def _safe_float_or_none(value) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def _value_at(values, index: int):
+    if values is None or index >= len(values):
+        return None
+    return values[index]

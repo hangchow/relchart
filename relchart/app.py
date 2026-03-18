@@ -14,7 +14,7 @@ from .models import DailyBar
 from .providers import YahooProvider
 from .storage import FileStorage
 from .symbols import RatioSymbol, StockSymbol, parse_request_items
-from .transform import assign_distinct_colors, to_percent_bars, to_percent_line_points
+from .transform import assign_distinct_colors, to_percent_bar, to_percent_bars, to_percent_line_points
 from .web.routes import register_routes
 from .window import build_window
 
@@ -42,6 +42,7 @@ class RemoteEvent:
 class RequestContext:
     metrics: RequestMetrics = field(default_factory=RequestMetrics)
     month_cache: dict[tuple[str, str], list[DailyBar]] = field(default_factory=dict)
+    provisional_cache: dict[str, DailyBar | None] = field(default_factory=dict)
 
 
 class RelChartService:
@@ -285,6 +286,7 @@ class RelChartService:
             "series_type": "candlestick",
             "base_close": round(base_close, 4),
             "bars": to_percent_bars(bars, base_close),
+            "provisional_bar": self._build_provisional_bar(symbol, bars, base_close, context),
         }
 
     def _build_ratio_series(
@@ -341,6 +343,12 @@ class RelChartService:
             reason=f"display name for {ratio.denominator.canonical}",
         )
         display_name = f"{numerator_name} / {denominator_name}"
+        provisional_point = self._build_ratio_provisional_point(
+            ratio,
+            base_value,
+            shared_dates[-1] if shared_dates else None,
+            context,
+        )
 
         return {
             "symbol": ratio.canonical,
@@ -348,6 +356,7 @@ class RelChartService:
             "market": "RATIO",
             "series_type": "line",
             "points": to_percent_line_points(ratio_values, base_value),
+            "provisional_point": provisional_point,
         }
 
     def _display_name_for_symbol(
@@ -364,6 +373,54 @@ class RelChartService:
         if fetched_name:
             return fetched_name
         return display_name
+
+    def _build_provisional_bar(
+        self,
+        symbol: StockSymbol,
+        bars: list[DailyBar],
+        base_close: float,
+        context: RequestContext,
+    ) -> dict[str, float | str] | None:
+        provisional_bar = self._get_provisional_daily_bar(
+            symbol,
+            context,
+            reason=f"provisional daily bar for {symbol.canonical}",
+        )
+        if provisional_bar is None:
+            return None
+        if bars and provisional_bar.date <= bars[-1].date:
+            return None
+        return to_percent_bar(provisional_bar, base_close)
+
+    def _build_ratio_provisional_point(
+        self,
+        ratio: RatioSymbol,
+        base_value: float,
+        latest_shared_date: date | None,
+        context: RequestContext,
+    ) -> dict[str, float | str] | None:
+        numerator_bar = self._get_provisional_daily_bar(
+            ratio.numerator,
+            context,
+            reason=f"provisional daily bar for {ratio.numerator.canonical}",
+        )
+        denominator_bar = self._get_provisional_daily_bar(
+            ratio.denominator,
+            context,
+            reason=f"provisional daily bar for {ratio.denominator.canonical}",
+        )
+        if numerator_bar is None or denominator_bar is None:
+            return None
+        if numerator_bar.date != denominator_bar.date:
+            return None
+        if latest_shared_date is not None and numerator_bar.date <= latest_shared_date:
+            return None
+
+        ratio_value = numerator_bar.close / denominator_bar.close
+        return to_percent_line_points(
+            [(numerator_bar.date.isoformat(), ratio_value)],
+            base_value,
+        )[0]
 
     def _find_ratio_base_value(
         self,
@@ -546,6 +603,40 @@ class RelChartService:
             elapsed * 1000.0,
         )
         return display_name
+
+    def _get_provisional_daily_bar(
+        self,
+        symbol: StockSymbol,
+        context: RequestContext,
+        reason: str,
+    ) -> DailyBar | None:
+        if symbol.canonical in context.provisional_cache:
+            return context.provisional_cache[symbol.canonical]
+
+        started = perf_counter()
+        bar = self.provider.fetch_provisional_daily_bar(symbol)
+        elapsed = perf_counter() - started
+        context.metrics.remote_seconds += elapsed
+        context.metrics.remote_requests += 1
+        context.metrics.remote_events.append(
+            RemoteEvent(
+                symbol=symbol.canonical,
+                kind="provisional-daily-bar",
+                reason=reason,
+                elapsed_seconds=elapsed,
+            )
+        )
+        context.provisional_cache[symbol.canonical] = bar
+        logger.info(
+            "remote fetch kind=provisional-daily-bar symbol=%s yahoo_symbol=%s reason=%s "
+            "bar_date=%s elapsed_ms=%.2f",
+            symbol.canonical,
+            symbol.yahoo_symbol,
+            reason,
+            "none" if bar is None else bar.date,
+            elapsed * 1000.0,
+        )
+        return bar
 
     def _find_previous_close_in_cache(
         self,

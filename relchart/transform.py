@@ -6,6 +6,7 @@ from itertools import permutations
 
 from .models import DailyBar
 
+
 def color_for_symbol(symbol: str) -> str:
     return _color_from_hue(_preferred_hue(symbol))
 
@@ -72,15 +73,19 @@ def _circular_distance(left: float, right: float) -> float:
 
 def to_percent_bars(bars: list[DailyBar], base_close: float) -> list[dict[str, float | str]]:
     return [
-        {
-            "time": bar.date.isoformat(),
-            "open": _to_percent(bar.open, base_close),
-            "high": _to_percent(bar.high, base_close),
-            "low": _to_percent(bar.low, base_close),
-            "close": _to_percent(bar.close, base_close),
-        }
+        to_percent_bar(bar, base_close)
         for bar in bars
     ]
+
+
+def to_percent_bar(bar: DailyBar, base_close: float) -> dict[str, float | str]:
+    return {
+        "time": bar.date.isoformat(),
+        "open": _to_percent(bar.open, base_close),
+        "high": _to_percent(bar.high, base_close),
+        "low": _to_percent(bar.low, base_close),
+        "close": _to_percent(bar.close, base_close),
+    }
 
 
 def to_percent_line_points(

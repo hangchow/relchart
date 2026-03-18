@@ -45,23 +45,39 @@ function renderWarnings(warnings) {
 }
 
 function buildTraces(series) {
-  return series.map((item) => {
+  const traces = [];
+  series.forEach((item) => {
     if (item.series_type === "line") {
-      return {
+      const lineX = item.points.map((point) => point.time);
+      const lineY = item.points.map((point) => point.value);
+      const lineCustomData = item.points.map((point) => point.raw_value);
+      let markerOpacity = 0;
+      let markerSymbol = "circle";
+
+      if (item.provisional_point) {
+        lineX.push(null, item.provisional_point.time);
+        lineY.push(null, item.provisional_point.value);
+        lineCustomData.push(null, item.provisional_point.raw_value);
+        markerOpacity = item.points.map(() => 0).concat([0, 1]);
+        markerSymbol = item.points.map(() => "circle").concat(["circle", "diamond-open"]);
+      }
+
+      traces.push({
         type: "scatter",
         mode: "lines+markers",
         name: item.display_name || item.symbol,
-        x: item.points.map((point) => point.time),
-        y: item.points.map((point) => point.value),
-        customdata: item.points.map((point) => point.raw_value),
+        x: lineX,
+        y: lineY,
+        customdata: lineCustomData,
         line: {
           color: item.color,
           width: 2.5,
         },
         marker: {
           size: 10,
-          opacity: 0,
+          opacity: markerOpacity,
           color: item.color,
+          symbol: markerSymbol,
         },
         hoverlabel: {
           bgcolor: "rgba(255,255,255,0.96)",
@@ -76,10 +92,30 @@ function buildTraces(series) {
           "Change %{y:.2f}%",
           "<extra></extra>",
         ].filter(Boolean).join("<br>"),
-      };
+      });
+
+      if (item.provisional_point) {
+        const previousPoint = item.points.length > 0 ? item.points[item.points.length - 1] : null;
+        if (previousPoint) {
+          traces.push({
+            type: "scatter",
+            mode: "lines",
+            x: [previousPoint.time, item.provisional_point.time],
+            y: [previousPoint.value, item.provisional_point.value],
+            line: {
+              color: item.color,
+              width: 3,
+              dash: "dot",
+            },
+            hoverinfo: "skip",
+            showlegend: false,
+          });
+        }
+      }
+      return;
     }
 
-    return {
+    traces.push({
       type: "candlestick",
       name: item.display_name || item.symbol,
       x: item.bars.map((bar) => bar.time),
@@ -112,8 +148,52 @@ function buildTraces(series) {
         "Close %{close:.2f}%",
         "<extra></extra>",
       ].filter(Boolean).join("<br>"),
-    };
+    });
+
+    if (item.provisional_bar) {
+      traces.push({
+        type: "candlestick",
+        name: `${item.display_name || item.symbol} provisional`,
+        x: [item.provisional_bar.time],
+        open: [item.provisional_bar.open],
+        high: [item.provisional_bar.high],
+        low: [item.provisional_bar.low],
+        close: [item.provisional_bar.close],
+        increasing: {
+          line: { color: item.color, width: 2 },
+          fillcolor: item.color,
+        },
+        decreasing: {
+          line: { color: item.color, width: 2 },
+          fillcolor: item.color,
+        },
+        whiskerwidth: 0.4,
+        opacity: 0.3,
+        hoverlabel: {
+          bgcolor: "rgba(255,255,255,0.96)",
+          bordercolor: item.color,
+          font: { color: "#0f172a", size: 12 },
+        },
+        hovertemplate: [
+          `<b>${item.display_name || item.symbol}</b>`,
+          item.display_name && item.display_name !== item.symbol ? item.symbol : null,
+          "Date %{x|%Y-%m-%d}",
+          "Open %{open:.2f}%",
+          "High %{high:.2f}%",
+          "Low %{low:.2f}%",
+          "Close %{close:.2f}%",
+          "Status provisional",
+          "<extra></extra>",
+        ].filter(Boolean).join("<br>"),
+      });
+    }
   });
+
+  return traces;
+}
+
+function hasProvisionalData(snapshot) {
+  return (snapshot.series || []).some((item) => item.provisional_bar || item.provisional_point);
 }
 
 function renderChart(snapshot) {
@@ -193,7 +273,10 @@ async function load() {
     }
 
     title.textContent = displayTitle(snapshot);
-    meta.textContent = `Window ${snapshot.window.start} to ${snapshot.window.end} · generated ${new Date(snapshot.generated_at).toLocaleString()}`;
+    const provisionalSuffix = hasProvisionalData(snapshot)
+      ? " · includes provisional current-trading-day data"
+      : "";
+    meta.textContent = `Window ${snapshot.window.start} to ${snapshot.window.end} · generated ${new Date(snapshot.generated_at).toLocaleString()}${provisionalSuffix}`;
     renderLegend(snapshot.series);
     renderWarnings(snapshot.warnings || []);
     renderChart(snapshot);
