@@ -49,8 +49,10 @@ Yahoo symbol 映射示例：
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
+
+下面的命令默认都在已激活的 `.venv` 中执行。
 
 启动 Web 应用：
 
@@ -122,7 +124,7 @@ http://127.0.0.1:19090/kline?stocks=US.AAPL,US.TSLA
 
 ## 故障排查
 
-- 出现 `ModuleNotFoundError: fastapi`、`uvicorn` 或 `yfinance`：运行 `pip install -r requirements.txt`
+- 出现 `ModuleNotFoundError: fastapi`、`uvicorn` 或 `yfinance`：先确认已激活 `.venv`，再运行 `python -m pip install -r requirements.txt`
 - 图表为空或请求失败：检查网络连接、股票代码格式，以及 URL 中的 `stocks` 查询参数
 - `YF.*` symbol 会原样传给 Yahoo；如果 Yahoo 本身不识别该 symbol，relchart 无法在本地修复
 - 端口已被占用：修改 `--web_port`

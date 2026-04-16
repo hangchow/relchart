@@ -57,8 +57,10 @@ Create and activate a virtual environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
+
+The commands below assume `.venv` is already activated.
 
 Start the web app:
 
@@ -134,7 +136,7 @@ writing the URL manually. The frontend already does this automatically for API r
 
 ## Troubleshooting
 
-- `ModuleNotFoundError: fastapi` or `uvicorn` or `yfinance`: run `pip install -r requirements.txt`
+- `ModuleNotFoundError: fastapi` or `uvicorn` or `yfinance`: make sure `.venv` is activated, then run `python -m pip install -r requirements.txt`
 - Empty chart or request failure: check internet connectivity, stock code format, and the `stocks` query parameter in the URL
 - `YF.*` symbols are passed to Yahoo as-is; if Yahoo itself does not recognize the symbol, relchart cannot repair it locally
 - Port already in use: change `--web_port`
