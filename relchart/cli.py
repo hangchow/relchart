@@ -32,6 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=19090,
         help="web server port, default 19090",
     )
+    parser.add_argument(
+        "--provider",
+        choices=("sina", "yahoo"),
+        default="sina",
+        help="market data provider, default sina",
+    )
     return parser
 
 
@@ -45,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         data_dir=Path(args.data_dir).expanduser().resolve(),
         web_host=args.web_host,
         web_port=args.web_port,
+        provider=args.provider,
     )
 
     app = create_app(config)

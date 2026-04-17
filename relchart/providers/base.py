@@ -1,10 +1,20 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Protocol
 
 from relchart.models import DailyBar
 from relchart.symbols import StockSymbol
+
+
+class ProviderRateLimitError(RuntimeError):
+    def __init__(self, provider: str, retry_at: datetime | None = None) -> None:
+        self.provider = provider
+        self.retry_at = retry_at
+        message = f"{provider} rate limited"
+        if retry_at is not None:
+            message = f"{message} until {retry_at.isoformat()}"
+        super().__init__(message)
 
 
 class DailyBarProvider(Protocol):

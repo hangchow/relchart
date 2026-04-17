@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import AppConfig
 from .models import DailyBar
-from .providers import YahooProvider
+from .providers import create_provider
+from .providers.base import ProviderRateLimitError
 from .storage import FileStorage
 from .symbols import RatioSymbol, StockSymbol, parse_request_items
 from .transform import assign_distinct_colors, to_percent_bar, to_percent_bars, to_percent_line_points
@@ -39,6 +40,13 @@ class RemoteEvent:
 
 
 @dataclass
+class DailyBarFetchResult:
+    bars: list[DailyBar]
+    rate_limited: bool = False
+    retry_at: datetime | None = None
+
+
+@dataclass
 class RequestContext:
     metrics: RequestMetrics = field(default_factory=RequestMetrics)
     month_cache: dict[tuple[str, str], list[DailyBar]] = field(default_factory=dict)
@@ -48,8 +56,8 @@ class RequestContext:
 class RelChartService:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
-        self.provider = YahooProvider()
-        self.storage = FileStorage(config.data_dir)
+        self.provider = create_provider(config.provider)
+        self.storage = FileStorage(config.data_dir / config.provider)
 
     def get_snapshot(self, stocks_arg: str) -> dict:
         items = parse_request_items(stocks_arg)
@@ -117,20 +125,27 @@ class RelChartService:
     ) -> None:
         for month in window.months:
             if month.is_current:
-                self._sync_current_month(symbol, month, window.end_date, context)
+                self._sync_current_month(symbol, month, window.end_date, warnings, context)
                 continue
 
             if self.storage.month_exists(symbol, month.key):
                 continue
 
-            fetch_end = month.end_date
-            bars = self._fetch_daily_bars(
+            fetch_result = self._fetch_daily_bars(
                 symbol,
                 month.start_date,
-                fetch_end,
+                month.end_date,
                 context,
                 reason=f"missing month file {month.key}",
             )
+            if fetch_result.rate_limited:
+                warnings.append(
+                    f"{symbol.canonical}: skipped historical backfill {month.key} because Yahoo Finance rate limited"
+                )
+                continue
+
+            fetch_end = month.end_date
+            bars = fetch_result.bars
             if self._is_complete_historical_month(symbol, month.start_date, fetch_end, bars):
                 self.storage.write_month_file(symbol, month.key, bars)
                 context.month_cache[(symbol.canonical, month.key)] = bars
@@ -145,6 +160,7 @@ class RelChartService:
         symbol: StockSymbol,
         month,
         window_end: date,
+        warnings: list[str],
         context: RequestContext,
     ) -> None:
         cutoff = self.provider.last_completed_trading_day(symbol)
@@ -168,13 +184,25 @@ class RelChartService:
             )
             return
 
-        bars = self._fetch_daily_bars(
+        fetch_result = self._fetch_daily_bars(
             symbol,
             month.start_date,
             fetch_end,
             context,
             reason=f"refresh current month {month.key} through {fetch_end}",
         )
+        if fetch_result.rate_limited:
+            cache_state = (
+                "no cached bars"
+                if not existing_bars
+                else f"last cached day {existing_bars[-1].date.isoformat()}"
+            )
+            warnings.append(
+                f"{symbol.canonical}: current month refresh paused because Yahoo Finance rate limited ({cache_state})"
+            )
+            return
+
+        bars = fetch_result.bars
         if not bars:
             return
 
@@ -513,9 +541,16 @@ class RelChartService:
         end_date: date,
         context: RequestContext,
         reason: str,
-    ) -> list[DailyBar]:
+    ) -> DailyBarFetchResult:
         started = perf_counter()
-        bars = self.provider.fetch_daily_bars(symbol, start_date, end_date)
+        status = "ok"
+        retry_at = None
+        try:
+            bars = self.provider.fetch_daily_bars(symbol, start_date, end_date)
+        except ProviderRateLimitError as exc:
+            bars = []
+            status = "rate-limited"
+            retry_at = exc.retry_at
         elapsed = perf_counter() - started
         context.metrics.remote_seconds += elapsed
         context.metrics.remote_requests += 1
@@ -528,17 +563,23 @@ class RelChartService:
             )
         )
         logger.info(
-            "remote fetch kind=daily-bars symbol=%s yahoo_symbol=%s reason=%s "
-            "start=%s end=%s bars=%d elapsed_ms=%.2f",
+            "remote fetch kind=daily-bars status=%s symbol=%s yahoo_symbol=%s reason=%s "
+            "start=%s end=%s bars=%d retry_at=%s elapsed_ms=%.2f",
+            status,
             symbol.canonical,
             symbol.yahoo_symbol,
             reason,
             start_date,
             end_date,
             len(bars),
+            _format_retry_at(retry_at),
             elapsed * 1000.0,
         )
-        return bars
+        return DailyBarFetchResult(
+            bars=bars,
+            rate_limited=(status == "rate-limited"),
+            retry_at=retry_at,
+        )
 
     def _fetch_previous_close(
         self,
@@ -548,7 +589,14 @@ class RelChartService:
         reason: str,
     ) -> float | None:
         started = perf_counter()
-        previous_close = self.provider.fetch_previous_close(symbol, before_date)
+        status = "ok"
+        retry_at = None
+        try:
+            previous_close = self.provider.fetch_previous_close(symbol, before_date)
+        except ProviderRateLimitError as exc:
+            previous_close = None
+            status = "rate-limited"
+            retry_at = exc.retry_at
         elapsed = perf_counter() - started
         context.metrics.remote_seconds += elapsed
         context.metrics.remote_requests += 1
@@ -561,13 +609,15 @@ class RelChartService:
             )
         )
         logger.info(
-            "remote fetch kind=previous-close symbol=%s yahoo_symbol=%s reason=%s "
-            "before=%s close=%s elapsed_ms=%.2f",
+            "remote fetch kind=previous-close status=%s symbol=%s yahoo_symbol=%s reason=%s "
+            "before=%s close=%s retry_at=%s elapsed_ms=%.2f",
+            status,
             symbol.canonical,
             symbol.yahoo_symbol,
             reason,
             before_date,
             "none" if previous_close is None else f"{previous_close:.4f}",
+            _format_retry_at(retry_at),
             elapsed * 1000.0,
         )
         return previous_close
@@ -579,7 +629,15 @@ class RelChartService:
         reason: str,
     ) -> str | None:
         started = perf_counter()
-        display_name, from_remote = self.provider.fetch_display_name(symbol)
+        status = "ok"
+        retry_at = None
+        try:
+            display_name, from_remote = self.provider.fetch_display_name(symbol)
+        except ProviderRateLimitError as exc:
+            display_name = None
+            from_remote = True
+            status = "rate-limited"
+            retry_at = exc.retry_at
         elapsed = perf_counter() - started
         if from_remote:
             context.metrics.remote_seconds += elapsed
@@ -593,13 +651,15 @@ class RelChartService:
                 )
             )
         logger.info(
-            "%s kind=display-name symbol=%s yahoo_symbol=%s reason=%s "
-            "display_name=%s elapsed_ms=%.2f",
+            "%s kind=display-name status=%s symbol=%s yahoo_symbol=%s reason=%s "
+            "display_name=%s retry_at=%s elapsed_ms=%.2f",
             "remote fetch" if from_remote else "metadata cache hit",
+            status,
             symbol.canonical,
             symbol.yahoo_symbol,
             reason,
             "none" if display_name is None else display_name,
+            _format_retry_at(retry_at),
             elapsed * 1000.0,
         )
         return display_name
@@ -614,7 +674,14 @@ class RelChartService:
             return context.provisional_cache[symbol.canonical]
 
         started = perf_counter()
-        bar = self.provider.fetch_provisional_daily_bar(symbol)
+        status = "ok"
+        retry_at = None
+        try:
+            bar = self.provider.fetch_provisional_daily_bar(symbol)
+        except ProviderRateLimitError as exc:
+            bar = None
+            status = "rate-limited"
+            retry_at = exc.retry_at
         elapsed = perf_counter() - started
         context.metrics.remote_seconds += elapsed
         context.metrics.remote_requests += 1
@@ -628,12 +695,14 @@ class RelChartService:
         )
         context.provisional_cache[symbol.canonical] = bar
         logger.info(
-            "remote fetch kind=provisional-daily-bar symbol=%s yahoo_symbol=%s reason=%s "
-            "bar_date=%s elapsed_ms=%.2f",
+            "remote fetch kind=provisional-daily-bar status=%s symbol=%s yahoo_symbol=%s reason=%s "
+            "bar_date=%s retry_at=%s elapsed_ms=%.2f",
+            status,
             symbol.canonical,
             symbol.yahoo_symbol,
             reason,
             "none" if bar is None else bar.date,
+            _format_retry_at(retry_at),
             elapsed * 1000.0,
         )
         return bar
@@ -680,3 +749,9 @@ def create_app(config: AppConfig) -> FastAPI:
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     register_routes(app, static_dir)
     return app
+
+
+def _format_retry_at(retry_at: datetime | None) -> str:
+    if retry_at is None:
+        return "none"
+    return retry_at.isoformat()

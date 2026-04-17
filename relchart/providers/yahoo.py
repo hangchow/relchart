@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 import importlib.util
 import json
 import logging
 import math
 from datetime import date, datetime, timedelta, timezone
+from typing import TypeVar
+from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -12,8 +15,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import exchange_calendars as xcals
 import pandas as pd
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
 
 from relchart.models import DailyBar
+from relchart.providers.base import ProviderRateLimitError
 from relchart.symbols import StockSymbol
 
 logger = logging.getLogger(__name__)
@@ -23,6 +28,9 @@ CALENDAR_BY_MARKET = {
     "HK": "XHKG",
     "YF": "24/5",
 }
+YAHOO_RATE_LIMIT_COOLDOWN = timedelta(seconds=60)
+
+T = TypeVar("T")
 
 
 class YahooProvider:
@@ -33,6 +41,7 @@ class YahooProvider:
         self._tickers: dict[str, yf.Ticker] = {}
         self._display_names: dict[str, str | None] = {}
         self._repair_enabled = importlib.util.find_spec("scipy") is not None
+        self._rate_limited_until: datetime | None = None
         if not self._repair_enabled:
             logger.info("scipy not installed, Yahoo price repair is disabled")
 
@@ -46,14 +55,20 @@ class YahooProvider:
             return []
 
         try:
-            history = self._ticker(symbol.yahoo_symbol).history(
-                start=start_date.isoformat(),
-                end=(end_date + timedelta(days=1)).isoformat(),
-                interval="1d",
-                auto_adjust=True,
-                repair=self._repair_enabled,
-                actions=False,
+            history = self._run_yahoo_request(
+                symbol.yahoo_symbol,
+                "daily-bars",
+                lambda: self._ticker(symbol.yahoo_symbol).history(
+                    start=start_date.isoformat(),
+                    end=(end_date + timedelta(days=1)).isoformat(),
+                    interval="1d",
+                    auto_adjust=True,
+                    repair=self._repair_enabled,
+                    actions=False,
+                ),
             )
+        except ProviderRateLimitError:
+            raise
         except Exception:
             logger.exception(
                 "yahoo history request failed symbol=%s start=%s end=%s",
@@ -112,6 +127,8 @@ class YahooProvider:
 
         try:
             latest_bar = self._fetch_latest_chart_daily_bar(symbol)
+        except ProviderRateLimitError:
+            raise
         except Exception:
             logger.exception("yahoo provisional daily bar request failed symbol=%s", symbol.yahoo_symbol)
             return None
@@ -127,19 +144,31 @@ class YahooProvider:
         ticker = self._ticker(symbol.yahoo_symbol)
         display_name = None
         try:
-            metadata = ticker.history_metadata or {}
+            metadata = self._run_yahoo_request(
+                symbol.yahoo_symbol,
+                "display-name-history-metadata",
+                lambda: ticker.history_metadata or {},
+            )
             display_name = _normalize_display_name(metadata.get("shortName"))
             if not display_name:
                 display_name = _normalize_display_name(metadata.get("longName"))
+        except ProviderRateLimitError:
+            raise
         except Exception:
             logger.exception("yahoo history metadata request failed symbol=%s", symbol.yahoo_symbol)
 
         if not display_name:
             try:
-                info = ticker.get_info() or {}
+                info = self._run_yahoo_request(
+                    symbol.yahoo_symbol,
+                    "display-name-info",
+                    lambda: ticker.get_info() or {},
+                )
                 display_name = _normalize_display_name(info.get("shortName"))
                 if not display_name:
                     display_name = _normalize_display_name(info.get("longName"))
+            except ProviderRateLimitError:
+                raise
             except Exception:
                 logger.exception("yahoo info request failed symbol=%s", symbol.yahoo_symbol)
 
@@ -204,6 +233,7 @@ class YahooProvider:
         return ticker
 
     def _fetch_latest_chart_daily_bar(self, symbol: StockSymbol) -> DailyBar | None:
+        self._raise_if_rate_limited(symbol.yahoo_symbol, "provisional-daily-bar")
         now_utc = datetime.now(timezone.utc)
         params = urlencode(
             {
@@ -219,12 +249,63 @@ class YahooProvider:
             f"{quote(symbol.yahoo_symbol, safe='')}?{params}"
         )
         request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urlopen(request, timeout=20) as response:
-            payload = json.load(response)
+        try:
+            with urlopen(request, timeout=20) as response:
+                payload = json.load(response)
+        except HTTPError as exc:
+            if exc.code == 429:
+                raise self._mark_rate_limited(
+                    symbol.yahoo_symbol,
+                    "provisional-daily-bar",
+                ) from exc
+            raise
 
         calendar = self._calendar(symbol)
         fallback_timezone = getattr(calendar.tz, "key", str(calendar.tz))
         return _latest_chart_daily_bar_from_payload(symbol, payload, fallback_timezone)
+
+    def _run_yahoo_request(
+        self,
+        yahoo_symbol: str,
+        operation: str,
+        func: Callable[[], T],
+    ) -> T:
+        self._raise_if_rate_limited(yahoo_symbol, operation)
+        try:
+            return func()
+        except YFRateLimitError as exc:
+            raise self._mark_rate_limited(yahoo_symbol, operation) from exc
+
+    def _raise_if_rate_limited(self, yahoo_symbol: str, operation: str) -> None:
+        if self._rate_limited_until is None:
+            return
+
+        now_utc = datetime.now(timezone.utc)
+        if now_utc >= self._rate_limited_until:
+            self._rate_limited_until = None
+            return
+
+        logger.info(
+            "yahoo request skipped due to active rate limit symbol=%s operation=%s retry_at=%s",
+            yahoo_symbol,
+            operation,
+            self._rate_limited_until.isoformat(),
+        )
+        raise ProviderRateLimitError("Yahoo Finance", retry_at=self._rate_limited_until)
+
+    def _mark_rate_limited(self, yahoo_symbol: str, operation: str) -> ProviderRateLimitError:
+        retry_at = datetime.now(timezone.utc) + YAHOO_RATE_LIMIT_COOLDOWN
+        if self._rate_limited_until is None or retry_at > self._rate_limited_until:
+            self._rate_limited_until = retry_at
+
+        logger.warning(
+            "yahoo rate limited symbol=%s operation=%s retry_at=%s cooldown_seconds=%d",
+            yahoo_symbol,
+            operation,
+            self._rate_limited_until.isoformat(),
+            int(YAHOO_RATE_LIMIT_COOLDOWN.total_seconds()),
+        )
+        return ProviderRateLimitError("Yahoo Finance", retry_at=self._rate_limited_until)
 
 
 def _to_date(value) -> date:

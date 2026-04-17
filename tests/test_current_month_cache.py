@@ -8,6 +8,7 @@ from pathlib import Path
 from relchart.app import RelChartService, RequestContext
 from relchart.config import AppConfig
 from relchart.models import DailyBar, MonthSlice, WindowSpec
+from relchart.providers.base import ProviderRateLimitError
 from relchart.symbols import parse_symbol
 
 
@@ -39,6 +40,24 @@ class FakeProvider:
     ) -> list[DailyBar]:
         self.fetch_calls.append((symbol.canonical, start_date, end_date))
         return [bar for bar in self.bars if start_date <= bar.date <= end_date]
+
+
+class RateLimitedProvider:
+    def __init__(self, cutoff: date) -> None:
+        self.cutoff = cutoff
+        self.fetch_calls: list[tuple[str, date, date]] = []
+
+    def last_completed_trading_day(self, symbol) -> date:
+        return self.cutoff
+
+    def fetch_daily_bars(
+        self,
+        symbol,
+        start_date: date,
+        end_date: date,
+    ) -> list[DailyBar]:
+        self.fetch_calls.append((symbol.canonical, start_date, end_date))
+        raise ProviderRateLimitError("Yahoo Finance")
 
 
 class CurrentMonthCacheRefreshTests(unittest.TestCase):
@@ -108,6 +127,31 @@ class CurrentMonthCacheRefreshTests(unittest.TestCase):
         cached_bars = self.service.storage.read_month_file(self.symbol, "202603")
         self.assertEqual(cached_bars[-1].date, date(2026, 3, 13))
         self.assertEqual(self.service.provider.fetch_calls, [])
+
+    def test_keeps_stale_cache_and_adds_warning_when_refresh_is_rate_limited(self) -> None:
+        self.service.storage.write_month_file(
+            self.symbol,
+            "202603",
+            self.all_march_bars[:5],
+        )
+        self.service.provider = RateLimitedProvider(date(2026, 3, 13))
+        warnings: list[str] = []
+
+        self.service._sync_symbol(self.symbol, self.window, warnings, RequestContext())
+
+        cached_bars = self.service.storage.read_month_file(self.symbol, "202603")
+        self.assertEqual(cached_bars[-1].date, date(2026, 3, 6))
+        self.assertEqual(
+            warnings,
+            [
+                "YF.GC=F: current month refresh paused because Yahoo Finance rate limited "
+                "(last cached day 2026-03-06)"
+            ],
+        )
+        self.assertEqual(
+            self.service.provider.fetch_calls,
+            [("YF.GC=F", date(2026, 3, 1), date(2026, 3, 13))],
+        )
 
 
 if __name__ == "__main__":

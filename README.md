@@ -8,14 +8,15 @@
 
 ## 数据源支持
 
-- 当前通过 `yfinance` 使用 Yahoo Finance 公开的日线数据
+- `US.*` 和 `HK.*` 当前通过 `akshare` 读取新浪财经公开日线数据
+- `YF.*` 当前仍通过 `yfinance` 使用 Yahoo Finance 公开日线数据
 - 支持 `US.*`、`HK.*` 和 `YF.*` 三种 symbol 输入
 - 支持 `<symbol>/<symbol>` 形式的比值项，例如 `YF.GC=F/YF.SI=F`
 - 不依赖 Futu OpenD
 - 缺失月文件时需要能够访问外网
 - 数据拉取由页面/API 访问触发，不会在服务启动时主动执行
 
-Yahoo symbol 映射示例：
+symbol 映射示例：
 
 - `US.AAPL -> AAPL`
 - `US.BRK.B -> BRK-B`
@@ -29,7 +30,9 @@ Yahoo symbol 映射示例：
 - 腾讯：`HK.00700`，不要写 `HK.TCH`
 - 阿里巴巴-W：`HK.09988`
 
-在 Yahoo Finance 侧，relchart 会把 5 位标准 HK 代码转换为 4 位 `.HK` symbol，即去掉一个前导零。例如：`HK.00700 -> 0700.HK`。
+在新浪财经侧，relchart 直接使用 5 位标准 HK 代码抓取港股日线，例如：`HK.00700 -> 00700`。
+
+在 Yahoo Finance 侧，`YF.*` 会原样透传，例如：`YF.GC=F -> GC=F`。
 
 `YF.*` 是原样透传给 Yahoo Finance 的前缀，适合 Yahoo 原生支持、但不是普通股票代码的 symbol，例如：
 
@@ -60,11 +63,19 @@ python -m pip install -r requirements.txt
 python relchart.py
 ```
 
+显式选择数据源：
+
+```bash
+python relchart.py --provider sina
+python relchart.py --provider yahoo
+```
+
 可选参数：
 
 - `--data_dir DIR`
 - `--web_host HOST`
 - `--web_port PORT`
+- `--provider {sina,yahoo}`
 
 然后打开：
 
@@ -119,12 +130,13 @@ http://127.0.0.1:19090/kline?stocks=US.AAPL,US.TSLA
 ## 进一步说明
 
 - 月文件会在访问时按需从 `data_dir` 读取；如果缺失，relchart 会先下载并存到本地
+- 不同 provider 会分别写入 `data_dir/<provider>/...`，例如 `./.stocks/sina/...` 和 `./.stocks/yahoo/...`
 - 如果你想刷新某个 symbol 的数据，删除 `data_dir` 下对应的月文件后重新访问页面即可
 - 缓存目录结构、文件格式、HTTP 接口及其他实现细节见 [`docs/technical-details.md`](docs/technical-details.md)
 
 ## 故障排查
 
-- 出现 `ModuleNotFoundError: fastapi`、`uvicorn` 或 `yfinance`：先确认已激活 `.venv`，再运行 `python -m pip install -r requirements.txt`
+- 出现 `ModuleNotFoundError: fastapi`、`uvicorn`、`akshare` 或 `yfinance`：先确认已激活 `.venv`，再运行 `python -m pip install -r requirements.txt`
 - 图表为空或请求失败：检查网络连接、股票代码格式，以及 URL 中的 `stocks` 查询参数
 - `YF.*` symbol 会原样传给 Yahoo；如果 Yahoo 本身不识别该 symbol，relchart 无法在本地修复
 - 端口已被占用：修改 `--web_port`

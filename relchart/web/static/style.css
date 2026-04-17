@@ -126,6 +126,31 @@ h1 {
   min-height: 76vh;
 }
 
+.chart-empty {
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.empty-state {
+  max-width: 520px;
+  text-align: center;
+  color: #4b5563;
+}
+
+.empty-state-title {
+  margin: 0;
+  font-size: clamp(24px, 3.2vw, 34px);
+  line-height: 1.05;
+  color: #2f2410;
+}
+
+.empty-state-detail {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
 @media (max-width: 900px) {
   .shell {
     padding: 18px 12px;

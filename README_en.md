@@ -8,14 +8,15 @@ Relative daily K-line overlay web tool.
 
 ## Data Source Support
 
-- Currently uses public Yahoo Finance daily bars through `yfinance`
+- `US.*` and `HK.*` currently use public Sina Finance daily bars through `akshare`
+- `YF.*` currently uses public Yahoo Finance daily bars through `yfinance`
 - Supports `US.*`, `HK.*`, and `YF.*` symbol inputs
 - Supports ratio items in `<symbol>/<symbol>` form, such as `YF.GC=F/YF.SI=F`
 - Does not depend on Futu OpenD
 - Requires outbound internet access when a month file is missing
 - Data fetch is triggered by page/API access, not by server startup
 
-Yahoo symbol mapping examples:
+Symbol mapping examples:
 
 - `US.AAPL -> AAPL`
 - `US.BRK.B -> BRK-B`
@@ -30,8 +31,10 @@ and prefer the 5-digit canonical form:
 - Tencent: `HK.00700`, not `HK.TCH`
 - Alibaba-W: `HK.09988`
 
-For Yahoo Finance, relchart converts the canonical 5-digit HK code to a 4-digit `.HK` symbol
-by dropping one leading zero. Example: `HK.00700 -> 0700.HK`.
+For Sina Finance, relchart uses the canonical 5-digit HK code directly for HK daily bars.
+Example: `HK.00700 -> 00700`.
+
+For Yahoo Finance, `YF.*` is passed through as-is. Example: `YF.GC=F -> GC=F`.
 
 `YF.*` is a raw Yahoo Finance passthrough prefix. It is useful for Yahoo-native symbols that are
 not plain stock tickers, such as:
@@ -68,11 +71,19 @@ Start the web app:
 python relchart.py
 ```
 
+Choose the data provider explicitly:
+
+```bash
+python relchart.py --provider sina
+python relchart.py --provider yahoo
+```
+
 Optional flags:
 
 - `--data_dir DIR`
 - `--web_host HOST`
 - `--web_port PORT`
+- `--provider {sina,yahoo}`
 
 Then open:
 
@@ -129,6 +140,8 @@ writing the URL manually. The frontend already does this automatically for API r
 
 - Month files are read from `data_dir` on demand; if a file is missing, relchart downloads it and
   stores it locally
+- Different providers are stored under separate cache roots such as `./.stocks/sina/...` and
+  `./.stocks/yahoo/...`
 - If you want to refresh a symbol's data, delete the corresponding month file under `data_dir` and
   request the page again
 - Cache layout, file format, HTTP endpoints, and other implementation notes are in
@@ -136,7 +149,7 @@ writing the URL manually. The frontend already does this automatically for API r
 
 ## Troubleshooting
 
-- `ModuleNotFoundError: fastapi` or `uvicorn` or `yfinance`: make sure `.venv` is activated, then run `python -m pip install -r requirements.txt`
+- `ModuleNotFoundError: fastapi` or `uvicorn` or `akshare` or `yfinance`: make sure `.venv` is activated, then run `python -m pip install -r requirements.txt`
 - Empty chart or request failure: check internet connectivity, stock code format, and the `stocks` query parameter in the URL
 - `YF.*` symbols are passed to Yahoo as-is; if Yahoo itself does not recognize the symbol, relchart cannot repair it locally
 - Port already in use: change `--web_port`

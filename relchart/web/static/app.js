@@ -7,6 +7,27 @@ function clearChart() {
   if (chart && window.Plotly) {
     window.Plotly.purge(chart);
   }
+  if (chart) {
+    chart.innerHTML = "";
+    chart.classList.remove("chart-empty");
+  }
+}
+
+function renderEmptyState(title, detail) {
+  const chart = document.getElementById("chart");
+  clearChart();
+  if (!chart) {
+    return;
+  }
+
+  chart.classList.add("chart-empty");
+  const detailHtml = detail ? `<p class="empty-state-detail">${detail}</p>` : "";
+  chart.innerHTML = `
+    <div class="empty-state">
+      <h2 class="empty-state-title">${title}</h2>
+      ${detailHtml}
+    </div>
+  `;
 }
 
 function renderLegend(series) {
@@ -198,6 +219,7 @@ function hasProvisionalData(snapshot) {
 
 function renderChart(snapshot) {
   const chart = document.getElementById("chart");
+  chart.classList.remove("chart-empty");
   const traces = buildTraces(snapshot.series);
   const layout = {
     template: "none",
@@ -257,7 +279,10 @@ async function load() {
     meta.textContent = "Open /kline?stocks=US.AAPL,US.TSLA";
     renderLegend([]);
     renderWarnings(["No stocks selected in the stocks query parameter."]);
-    clearChart();
+    renderEmptyState(
+      "No chart data available",
+      "Add at least one stock code in the stocks query parameter.",
+    );
     return;
   }
 
@@ -268,24 +293,36 @@ async function load() {
       throw new Error(payload.detail || `request failed: ${response.status}`);
     }
     const snapshot = await response.json();
-    if (!snapshot.series || snapshot.series.length === 0) {
-      throw new Error("no chart series available");
-    }
-
     title.textContent = displayTitle(snapshot);
     const provisionalSuffix = hasProvisionalData(snapshot)
       ? " · includes provisional current-trading-day data"
       : "";
     meta.textContent = `Window ${snapshot.window.start} to ${snapshot.window.end} · generated ${new Date(snapshot.generated_at).toLocaleString()}${provisionalSuffix}`;
-    renderLegend(snapshot.series);
-    renderWarnings(snapshot.warnings || []);
+    renderLegend(snapshot.series || []);
+    const warnings = snapshot.warnings || [];
+    if (!snapshot.series || snapshot.series.length === 0) {
+      renderWarnings(
+        warnings.length > 0
+          ? warnings
+          : ["No chart data available for the requested window."],
+      );
+      renderEmptyState(
+        "No chart data available",
+        warnings.length > 0
+          ? "See the warnings above for the current data availability state."
+          : "No cached bars were available for the requested window.",
+      );
+      return;
+    }
+
+    renderWarnings(warnings);
     renderChart(snapshot);
   } catch (error) {
     title.textContent = "relchart";
     meta.textContent = String(error);
     renderLegend([]);
     renderWarnings([String(error)]);
-    clearChart();
+    renderEmptyState("Request failed", String(error));
   }
 }
 

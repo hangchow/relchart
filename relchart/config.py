@@ -10,4 +10,5 @@ class AppConfig:
     data_dir: Path
     web_host: str
     web_port: int
+    provider: str = "sina"
     today: date | None = None
