@@ -15,7 +15,7 @@ from .providers import create_provider
 from .providers.base import ProviderRateLimitError
 from .storage import FileStorage
 from .symbols import RatioSymbol, StockSymbol, parse_request_items
-from .transform import assign_distinct_colors, to_percent_bar, to_percent_bars, to_percent_line_points
+from .transform import assign_distinct_colors, to_percent_line_points
 from .web.routes import register_routes
 from .window import build_window
 
@@ -261,7 +261,7 @@ class RelChartService:
             item["color"] = colors[item["symbol"]]
 
         return {
-            "title": "Relative Daily K Overlay",
+            "title": "Relative Daily Close Overlay",
             "generated_at": datetime.now(UTC).isoformat(),
             "window": {
                 "start": window.start_date.isoformat(),
@@ -311,10 +311,12 @@ class RelChartService:
             "symbol": symbol.canonical,
             "display_name": display_name,
             "market": symbol.market,
-            "series_type": "candlestick",
+            "series_type": "line",
             "base_close": round(base_close, 4),
-            "bars": to_percent_bars(bars, base_close),
-            "provisional_bar": self._build_provisional_bar(symbol, bars, base_close, context),
+            "points": to_percent_line_points(
+                [(bar.date.isoformat(), bar.close) for bar in bars], base_close,
+            ),
+            "provisional_point": self._build_provisional_point(symbol, bars, base_close, context),
         }
 
     def _build_ratio_series(
@@ -402,7 +404,7 @@ class RelChartService:
             return fetched_name
         return display_name
 
-    def _build_provisional_bar(
+    def _build_provisional_point(
         self,
         symbol: StockSymbol,
         bars: list[DailyBar],
@@ -418,7 +420,9 @@ class RelChartService:
             return None
         if bars and provisional_bar.date <= bars[-1].date:
             return None
-        return to_percent_bar(provisional_bar, base_close)
+        return to_percent_line_points(
+            [(provisional_bar.date.isoformat(), provisional_bar.close)], base_close,
+        )[0]
 
     def _build_ratio_provisional_point(
         self,

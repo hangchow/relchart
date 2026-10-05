@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-MAX_SYMBOLS = 5
 YF_EXACT_CALENDAR_HINTS = {
     "GC=F": "XNYS",
     "SI=F": "XNYS",
@@ -114,8 +113,6 @@ def parse_request_items(raw: str) -> list[StockSymbol | RatioSymbol]:
     items = [parse_request_item(part) for part in raw.split(",") if part.strip()]
     if not items:
         raise ValueError("no valid stock codes provided")
-    if len(items) > MAX_SYMBOLS:
-        raise ValueError(f"at most {MAX_SYMBOLS} stocks are supported")
     return items
 
 

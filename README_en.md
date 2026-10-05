@@ -2,9 +2,9 @@
 
 # relchart
 
-Relative daily K-line overlay web tool.
+Relative daily closing-price line comparison web tool.
 
-`relchart` starts a local web server and renders a fixed-window multi-symbol percentage candlestick chart in the browser. Month files are read on demand when you visit a chart URL; missing files are downloaded, written to disk, and then read back from the local cache.
+`relchart` starts a local web server and renders a fixed-window multi-symbol percentage line chart in the browser. Month files are read on demand when you visit a chart URL; missing files are downloaded, written to disk, and then read back from the local cache.
 
 ## Data Source Support
 
@@ -51,7 +51,7 @@ When Yahoo returns a `shortName`, relchart uses that English display name in the
 legend, and hover labels, while still showing the original symbol as secondary text.
 
 Ratio items use `<symbol>/<symbol>` syntax. They are rendered as line traces based on daily close
-ratios and can be mixed with regular candlestick symbols in the same `stocks` query.
+ratios and can be mixed with regular closing-price lines in the same `stocks` query.
 
 ## Quick Start
 
@@ -91,15 +91,21 @@ Then open:
 http://127.0.0.1:19090/kline?stocks=US.AAPL,US.TSLA
 ```
 
-You can also pass a single stock code and view a single-symbol daily K chart.
+You can also pass a single stock code and view a single-symbol daily closing-price line chart.
+
+There is no fixed symbol-count limit. Pass a comma-separated `stocks` list to compare all symbols
+on one chart. The Y axis shows percentage change from the base close; provisional data uses
+a dotted connector and an open marker.
 
 ## Examples
+
+These screenshots are retained from an earlier version; regular symbols now render as closing-price lines.
 
 Open one stock:
 
 [`http://127.0.0.1:19090/kline?stocks=HK.700`](http://127.0.0.1:19090/kline?stocks=HK.700)
 
-`HK.700` is normalized to canonical `HK.00700` and renders a single-symbol daily K chart.
+`HK.700` is normalized to canonical `HK.00700` and renders a single-symbol daily closing-price line chart.
 
 ![Single HK stock example](docs/images/hk-700-single.png)
 
@@ -127,11 +133,11 @@ Compare ratio lines:
 
 ![Ratio line comparison](docs/images/ratio-gc-si-hg-ali.png)
 
-Open a mixed chart with candlesticks and a ratio line:
+Open a mixed chart with closing-price and ratio lines:
 
 [`http://127.0.0.1:19090/kline?stocks=US.MSFT,YF.GC=F/YF.SI=F`](http://127.0.0.1:19090/kline?stocks=US.MSFT,YF.GC%3DF%2FYF.SI%3DF)
 
-![Mixed candlestick and ratio example](docs/images/ratio-gc-si-msft.png)
+![Mixed closing-price and ratio example](docs/images/ratio-gc-si-msft.png)
 
 When a Yahoo raw symbol contains reserved URL characters such as `=`, encode the query value when
 writing the URL manually. The frontend already does this automatically for API requests.

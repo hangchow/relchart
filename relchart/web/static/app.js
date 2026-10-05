@@ -68,153 +68,64 @@ function renderWarnings(warnings) {
 function buildTraces(series) {
   const traces = [];
   series.forEach((item) => {
-    if (item.series_type === "line") {
-      const lineX = item.points.map((point) => point.time);
-      const lineY = item.points.map((point) => point.value);
-      const lineCustomData = item.points.map((point) => point.raw_value);
-      let markerOpacity = 0;
-      let markerSymbol = "circle";
-
-      if (item.provisional_point) {
-        lineX.push(null, item.provisional_point.time);
-        lineY.push(null, item.provisional_point.value);
-        lineCustomData.push(null, item.provisional_point.raw_value);
-        markerOpacity = item.points.map(() => 0).concat([0, 1]);
-        markerSymbol = item.points.map(() => "circle").concat(["circle", "diamond-open"]);
-      }
-
-      traces.push({
-        type: "scatter",
-        mode: "lines+markers",
-        name: item.display_name || item.symbol,
-        x: lineX,
-        y: lineY,
-        customdata: lineCustomData,
-        line: {
-          color: item.color,
-          width: 2.5,
-        },
-        marker: {
-          size: 10,
-          opacity: markerOpacity,
-          color: item.color,
-          symbol: markerSymbol,
-        },
-        hoverlabel: {
-          bgcolor: "rgba(255,255,255,0.96)",
-          bordercolor: item.color,
-          font: { color: "#0f172a", size: 12 },
-        },
-        hovertemplate: [
-          `<b>${item.display_name || item.symbol}</b>`,
-          item.display_name && item.display_name !== item.symbol ? item.symbol : null,
-          "Date %{x|%Y-%m-%d}",
-          "Ratio %{customdata:.4f}",
-          "Change %{y:.2f}%",
-          "<extra></extra>",
-        ].filter(Boolean).join("<br>"),
-      });
-
-      if (item.provisional_point) {
-        const previousPoint = item.points.length > 0 ? item.points[item.points.length - 1] : null;
-        if (previousPoint) {
-          traces.push({
-            type: "scatter",
-            mode: "lines",
-            x: [previousPoint.time, item.provisional_point.time],
-            y: [previousPoint.value, item.provisional_point.value],
-            line: {
-              color: item.color,
-              width: 3,
-              dash: "dot",
-            },
-            hoverinfo: "skip",
-            showlegend: false,
-          });
-        }
-      }
-      return;
-    }
-
+    const hovertemplate = [
+      `<b>${item.display_name || item.symbol}</b>`,
+      item.display_name && item.display_name !== item.symbol ? item.symbol : null,
+      "Date %{x|%Y-%m-%d}",
+      item.market === "RATIO" ? "Ratio %{customdata:.4f}" : "Close %{customdata:.2f}",
+      "Change %{y:.2f}%",
+    ].filter(Boolean).join("<br>");
+    const hoverlabel = {
+      bgcolor: "rgba(255,255,255,0.96)",
+      bordercolor: item.color,
+      font: { color: "#0f172a", size: 12 },
+    };
     traces.push({
-      type: "candlestick",
+      type: "scatter",
+      mode: item.points.length === 1 ? "lines+markers" : "lines",
       name: item.display_name || item.symbol,
-      x: item.bars.map((bar) => bar.time),
-      open: item.bars.map((bar) => bar.open),
-      high: item.bars.map((bar) => bar.high),
-      low: item.bars.map((bar) => bar.low),
-      close: item.bars.map((bar) => bar.close),
-      increasing: {
-        line: { color: item.color, width: 1.25 },
-        fillcolor: item.color,
-      },
-      decreasing: {
-        line: { color: item.color, width: 1.25 },
-        fillcolor: item.color,
-      },
-      whiskerwidth: 0.3,
-      opacity: 0.62,
-      hoverlabel: {
-        bgcolor: "rgba(255,255,255,0.96)",
-        bordercolor: item.color,
-        font: { color: "#0f172a", size: 12 },
-      },
-      hovertemplate: [
-        `<b>${item.display_name || item.symbol}</b>`,
-        item.display_name && item.display_name !== item.symbol ? item.symbol : null,
-        "Date %{x|%Y-%m-%d}",
-        "Open %{open:.2f}%",
-        "High %{high:.2f}%",
-        "Low %{low:.2f}%",
-        "Close %{close:.2f}%",
-        "<extra></extra>",
-      ].filter(Boolean).join("<br>"),
+      x: item.points.map((point) => point.time),
+      y: item.points.map((point) => point.value),
+      customdata: item.points.map((point) => point.raw_value),
+      line: { color: item.color, width: 2.5 },
+      marker: { color: item.color, size: 7 },
+      hoverlabel,
+      hovertemplate: `${hovertemplate}<extra></extra>`,
     });
 
-    if (item.provisional_bar) {
+    if (item.provisional_point) {
+      const point = item.provisional_point;
+      const previous = item.points[item.points.length - 1];
+      if (previous) {
+        traces.push({
+          type: "scatter",
+          mode: "lines",
+          x: [previous.time, point.time],
+          y: [previous.value, point.value],
+          line: { color: item.color, width: 2.5, dash: "dot" },
+          hoverinfo: "skip",
+          showlegend: false,
+        });
+      }
       traces.push({
-        type: "candlestick",
-        name: `${item.display_name || item.symbol} provisional`,
-        x: [item.provisional_bar.time],
-        open: [item.provisional_bar.open],
-        high: [item.provisional_bar.high],
-        low: [item.provisional_bar.low],
-        close: [item.provisional_bar.close],
-        increasing: {
-          line: { color: item.color, width: 2 },
-          fillcolor: item.color,
-        },
-        decreasing: {
-          line: { color: item.color, width: 2 },
-          fillcolor: item.color,
-        },
-        whiskerwidth: 0.4,
-        opacity: 0.3,
-        hoverlabel: {
-          bgcolor: "rgba(255,255,255,0.96)",
-          bordercolor: item.color,
-          font: { color: "#0f172a", size: 12 },
-        },
-        hovertemplate: [
-          `<b>${item.display_name || item.symbol}</b>`,
-          item.display_name && item.display_name !== item.symbol ? item.symbol : null,
-          "Date %{x|%Y-%m-%d}",
-          "Open %{open:.2f}%",
-          "High %{high:.2f}%",
-          "Low %{low:.2f}%",
-          "Close %{close:.2f}%",
-          "Status provisional",
-          "<extra></extra>",
-        ].filter(Boolean).join("<br>"),
+        type: "scatter",
+        mode: "markers",
+        name: item.display_name || item.symbol,
+        x: [point.time],
+        y: [point.value],
+        customdata: [point.raw_value],
+        marker: { color: item.color, size: 10, symbol: "diamond-open" },
+        hoverlabel,
+        hovertemplate: `${hovertemplate}<br>Status provisional<extra></extra>`,
+        showlegend: false,
       });
     }
   });
-
   return traces;
 }
 
 function hasProvisionalData(snapshot) {
-  return (snapshot.series || []).some((item) => item.provisional_bar || item.provisional_point);
+  return (snapshot.series || []).some((item) => item.provisional_point);
 }
 
 function renderChart(snapshot) {
@@ -258,15 +169,18 @@ function renderChart(snapshot) {
     doubleClick: false,
   };
 
-  Plotly.react(chart, traces, layout, config);
+  return Plotly.react(chart, traces, layout, config);
 }
 
 function displayTitle(snapshot) {
   const labels = (snapshot.series || []).map((item) => item.display_name || item.symbol);
+  if (labels.length > 5) {
+    return `Relative Performance · ${labels.length} symbols`;
+  }
   if (labels.length > 0) {
     return labels.join(" · ");
   }
-  return (snapshot.requested_symbols || []).join(" · ") || snapshot.title || "Relative Daily K Overlay";
+  return (snapshot.requested_symbols || []).join(" · ") || snapshot.title || "Relative Daily Close Overlay";
 }
 
 async function load() {
@@ -316,7 +230,7 @@ async function load() {
     }
 
     renderWarnings(warnings);
-    renderChart(snapshot);
+    await renderChart(snapshot);
   } catch (error) {
     title.textContent = "relchart";
     meta.textContent = String(error);

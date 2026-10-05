@@ -29,8 +29,8 @@ body {
 
 .header {
   display: flex;
-  justify-content: space-between;
-  gap: 24px;
+  flex-direction: column;
+  gap: 16px;
   align-items: flex-start;
   margin-bottom: 18px;
 }
@@ -54,12 +54,10 @@ h1 {
 }
 
 .legend {
-  display: grid;
-  gap: 10px;
-  width: min(300px, 100%);
-  flex: 0 0 300px;
-  justify-items: stretch;
-  padding: 10px 0 0 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  width: 100%;
 }
 
 .legend-item {

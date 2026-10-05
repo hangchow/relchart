@@ -9,7 +9,7 @@ from relchart.app import RelChartService, RequestContext
 from relchart.config import AppConfig
 from relchart.models import DailyBar, MonthSlice, WindowSpec
 from relchart.providers.yahoo import _latest_chart_daily_bar_from_payload
-from relchart.symbols import RatioSymbol, parse_request_item, parse_symbol
+from relchart.symbols import RatioSymbol, parse_request_item, parse_request_items, parse_symbol
 
 
 def _bar(symbol: str, year: int, month: int, day: int, close: float) -> DailyBar:
@@ -78,7 +78,7 @@ class ProvisionalSnapshotTests(unittest.TestCase):
             ],
         )
 
-    def test_snapshot_includes_provisional_bar_without_writing_it(self) -> None:
+    def test_snapshot_includes_provisional_close_without_writing_it(self) -> None:
         symbol = parse_symbol("YF.GC=F")
         self.service.storage.write_month_file(
             symbol,
@@ -98,12 +98,40 @@ class ProvisionalSnapshotTests(unittest.TestCase):
         snapshot = self.service._build_snapshot(self.window, [symbol], [], RequestContext())
 
         series = snapshot["series"][0]
-        self.assertEqual(series["provisional_bar"]["time"], "2026-03-04")
-        self.assertEqual(series["provisional_bar"]["close"], 12.0)
+        self.assertEqual(series["series_type"], "line")
+        self.assertEqual(series["points"], [
+            {"time": "2026-03-02", "value": 2.0, "raw_value": 102.0},
+            {"time": "2026-03-03", "value": 3.0, "raw_value": 103.0},
+        ])
+        self.assertEqual(series["provisional_point"], {
+            "time": "2026-03-04", "value": 12.0, "raw_value": 112.0,
+        })
 
         cached_bars = self.service.storage.read_month_file(symbol, "202603")
         self.assertEqual([bar.date for bar in cached_bars], [date(2026, 3, 2), date(2026, 3, 3)])
         self.assertEqual(self.service.provider.provisional_calls, [symbol.canonical])
+
+    def test_snapshot_supports_twelve_symbols_with_distinct_colors(self) -> None:
+        symbols = parse_request_items(
+            ",".join(f"US.TEST{index}" for index in range(12))
+        )
+        self.service.provider = FakeSnapshotProvider(
+            previous_close_by_symbol={symbol.canonical: 100.0 for symbol in symbols},
+            provisional_by_symbol={},
+        )
+        for symbol in symbols:
+            self.service.storage.write_month_file(
+                symbol, "202603", [_bar(symbol.canonical, 2026, 3, 2, 102.0)],
+            )
+
+        snapshot = self.service._build_snapshot(self.window, symbols, [], RequestContext())
+
+        self.assertEqual(len(snapshot["series"]), 12)
+        self.assertEqual(len({item["color"] for item in snapshot["series"]}), 12)
+        for item in snapshot["series"]:
+            self.assertEqual(item["series_type"], "line")
+            self.assertEqual(item["points"][0]["value"], 2.0)
+            self.assertIsNone(item["provisional_point"])
 
     def test_ratio_snapshot_includes_matching_provisional_point(self) -> None:
         item = parse_request_item("YF.GC=F/YF.SI=F")

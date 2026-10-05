@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import colorsys
 import hashlib
-from itertools import permutations
+from scipy.optimize import linear_sum_assignment
 
 from .models import DailyBar
 
@@ -34,14 +34,15 @@ def assign_distinct_colors(symbols: list[str]) -> dict[str, str]:
 
     for offset in range(360):
         rotated_slots = tuple((slot + offset) % 360.0 for slot in base_slots)
-        for assignment in permutations(rotated_slots):
-            cost = sum(
-                _circular_distance(preferred_hues[index], assigned_hue) ** 2
-                for index, assigned_hue in enumerate(assignment)
-            )
-            if best_cost is None or cost < best_cost:
-                best_cost = cost
-                best_assignment = assignment
+        costs = [
+            [_circular_distance(hue, slot) ** 2 for slot in rotated_slots]
+            for hue in preferred_hues
+        ]
+        rows, columns = linear_sum_assignment(costs)
+        cost = sum(costs[row][column] for row, column in zip(rows, columns))
+        if best_cost is None or cost < best_cost:
+            best_cost = cost
+            best_assignment = tuple(rotated_slots[column] for column in columns)
 
     assert best_assignment is not None
     return {

@@ -2,6 +2,12 @@
 
 # Technical Details
 
+Charts have no fixed symbol-count limit. Regular symbols plot daily closing-price changes,
+and ratios plot daily close-ratio changes. Every snapshot series uses `series_type: "line"`
+and `points` containing `time`, `value` (percentage change from the base), and `raw_value`
+(close or ratio). Regular symbols no longer return `bars` / `provisional_bar`;
+provisional data uses `provisional_point`, shown with a dotted connector and an open marker.
+
 This document collects implementation-oriented details that are intentionally kept out of the main
 README.
 
