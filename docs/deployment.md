@@ -1,6 +1,6 @@
 # osaka 部署与自动更新方案
 
-状态：部署实现已完成，首次上线验收进行中。核查日期：2026-10-06。
+状态：已部署并启用自动更新。核查日期：2026-10-06。
 
 采用与 `~/workspace/opdash` 相同的 **独立版本目录 + Python venv + systemd 服务 + timer 拉取发布**，由 relchart 自身直接监听 `192.168.10.1:80`，提供 `http://192.168.10.1/`。
 
@@ -12,11 +12,11 @@
 | LAN | `enp9s0f0np0`，`192.168.10.1/24` |
 | 资源 | 约 15 GiB 内存，磁盘可用约 711 GiB |
 | 现有服务 | `opdash-web.service` 和 `opdash-deploy.timer` 均 active，HTTP 使用 18080 |
-| 新服务端口 | 核查时 80 端口无监听 |
+| 新服务端口 | Uvicorn 直接监听 `192.168.10.1:80`，无需 nginx |
 | 代码来源 | `https://github.com/hangchow/relchart.git`，匿名读取成功 |
 | 发布分支 | 远端默认分支为 `main`，不是 opdash 的 `master` |
 | 当前远端提交 | `ba833d0`（开始实施时） |
-| 本地改动 | 折线图及取消数量限制已提交；部署实现将单独提交并 push |
+| 首次部署提交 | `7864fd3`，部署实现及测试已提交并 push |
 | 当前权限 | 已通过 sean 登录并完成管理员身份验证；已核对 UFW 和现有应用规则 |
 
 参考实现：`../opdash/docs/deployment.md`、`../opdash/deploy/deploy.py` 以及其 systemd units。可以复用事务、锁、失败回滚和版本清理设计，不能直接原样复制发布器：仓库分支、入口、静态资源路径及检查接口均不同。
@@ -163,6 +163,10 @@ WantedBy=timers.target
 当前普通标的的 API 已由 `bars` 改为 `points`，因此首次发布应将后端和前端作为同一 release 切换，并验证浏览器刷新获取新版本。
 
 ## 首次实施与验收
+
+2026-10-06 首次上线记录：通过 `sean@192.168.10.1` 安装，应用使用独立的 `relchart` 用户；`relchart-web.service`、防火墙服务和自动发布 timer 均已启用。首次发布 `7864fd3` 的 24 项测试通过，LAN 健康和就绪检查返回实际发布 SHA；浏览器已验证 10 个标的在同一张图中显示 10 条折线，悬停数据正常，无脚本异常。44 个既有缓存文件已迁移到 `/var/lib/relchart/stocks/sina/`，现有 opdash 服务保持运行。
+
+发布状态和切换记录保存在 `/var/lib/relchart-deploy/state.json`，实际运行版本以 `/healthz` 为准；自动发布日志见 `journalctl -u relchart-deploy.service`。
 
 实施顺序：补齐上表内容并在本地测试 → 在目标平台验证锁定依赖 → 将当前业务修改与部署文件提交到 main 并 push → 管理员安装服务及端口权限 → 准备持久缓存 → 首次手动发布 → 验证真实图表与失败回滚 → 启用 timer → 用一次 main 更新验证自动发布。
 
