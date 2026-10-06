@@ -1,10 +1,11 @@
-table inet relchart_guard
-delete table inet relchart_guard
+# Separate table: never flush the gateway's existing routing/firewall rules.
+add table inet relchart_guard
+flush table inet relchart_guard
 table inet relchart_guard {
     chain input {
         type filter hook input priority -10; policy accept;
-        tcp dport 80 iifname "lo" accept
-        tcp dport 80 iifname "enp9s0f0np0" ip saddr 192.168.10.0/24 ip daddr 192.168.10.1 accept
-        tcp dport 80 counter drop
+        tcp dport 19225 iifname "lo" accept
+        tcp dport 19225 iifname "enp9s0f0np0" ip saddr 192.168.10.0/24 ip daddr 192.168.10.1 accept
+        tcp dport 19225 counter drop
     }
 }

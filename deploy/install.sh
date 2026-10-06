@@ -30,6 +30,6 @@ systemd-analyze verify /etc/systemd/system/relchart-web.service /etc/systemd/sys
 systemctl daemon-reload
 systemctl enable --now relchart-firewall.service
 nft -f /etc/relchart/firewall.nft
-ufw allow in on enp9s0f0np0 from 192.168.10.0/24 to 192.168.10.1 port 80 proto tcp comment 'relchart LAN'
+ufw allow in on enp9s0f0np0 from 192.168.10.0/24 to 192.168.10.1 port 19225 proto tcp comment 'relchart LAN'
 systemctl enable relchart-web.service
 echo 'Installed. Run initial deployment, verify it, then enable relchart-deploy.timer.'

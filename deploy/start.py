@@ -12,8 +12,8 @@ def main():
     os.environ["RELCHART_RELEASE"] = release.name
     args = [str(release / ".venv/bin/python"), "-u", str(release / "relchart.py")]
     for flag, key, default in (
-        ("web_host", "WEB_HOST", "192.168.10.1"),
-        ("web_port", "WEB_PORT", "80"),
+        ("web_host", "WEB_HOST", "0.0.0.0"),
+        ("web_port", "WEB_PORT", "19225"),
         ("data_dir", "DATA_DIR", "/var/lib/relchart/stocks"),
         ("provider", "PROVIDER", "sina"),
         ("chart_timeout", "CHART_TIMEOUT", "120"),
