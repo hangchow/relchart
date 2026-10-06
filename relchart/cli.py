@@ -38,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
         default="sina",
         help="market data provider, default sina",
     )
+    parser.add_argument("--chart_timeout", type=float, default=120.0,
+                        help="Maximum seconds for a chart data job, default 120")
     return parser
 
 
@@ -46,12 +48,15 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not (1 <= args.web_port <= 65535):
         raise SystemExit("web_port must be between 1 and 65535")
+    if not (0 < args.chart_timeout <= 600):
+        raise SystemExit("chart_timeout must be greater than 0 and at most 600")
 
     config = AppConfig(
         data_dir=Path(args.data_dir).expanduser().resolve(),
         web_host=args.web_host,
         web_port=args.web_port,
         provider=args.provider,
+        chart_timeout=args.chart_timeout,
     )
 
     app = create_app(config)

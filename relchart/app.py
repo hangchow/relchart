@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -8,12 +10,14 @@ from time import perf_counter
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from .config import AppConfig
 from .models import DailyBar
 from .providers import create_provider
 from .providers.base import ProviderRateLimitError
 from .storage import FileStorage
+from .snapshot_worker import SnapshotWorker
 from .symbols import RatioSymbol, StockSymbol, parse_request_items
 from .transform import assign_distinct_colors, to_percent_line_points
 from .web.routes import register_routes
@@ -744,12 +748,23 @@ class RelChartService:
         return None
 
 
-def create_app(config: AppConfig) -> FastAPI:
-    service = RelChartService(config)
-
+def create_app(config: AppConfig, *, snapshot_worker=None) -> FastAPI:
+    worker = snapshot_worker if snapshot_worker is not None else SnapshotWorker(config)
+    data_dir = config.data_dir / config.provider
+    data_dir.mkdir(parents=True, exist_ok=True)
     static_dir = Path(__file__).resolve().parent / "web" / "static"
-    app = FastAPI(title="relchart")
-    app.state.relchart_service = service
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            await run_in_threadpool(worker.close)
+
+    app = FastAPI(title="relchart", lifespan=lifespan)
+    app.state.snapshot_worker = worker
+    app.state.data_dir = data_dir
+    app.state.release = os.environ.get("RELCHART_RELEASE", "dev")
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     register_routes(app, static_dir)
     return app

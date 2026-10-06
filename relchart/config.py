@@ -12,3 +12,4 @@ class AppConfig:
     web_port: int
     provider: str = "sina"
     today: date | None = None
+    chart_timeout: float = 120.0

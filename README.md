@@ -144,3 +144,7 @@ http://127.0.0.1:19090/kline?stocks=US.AAPL,US.TSLA
 - 图表为空或请求失败：检查网络连接、股票代码格式，以及 URL 中的 `stocks` 查询参数
 - `YF.*` symbol 会原样传给 Yahoo；如果 Yahoo 本身不识别该 symbol，relchart 无法在本地修复
 - 端口已被占用：修改 `--web_port`
+
+## 部署到 osaka
+
+独立版本、持久缓存、systemd 托管、main 自动更新与回滚，见 [部署文档](docs/deployment.md)。

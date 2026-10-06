@@ -1,0 +1,13 @@
+[Unit]
+Description=Restrict relchart HTTP to the Osaka LAN
+Before=relchart-web.service
+After=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/relchart/firewall.nft
+ExecReload=/usr/sbin/nft -f /etc/relchart/firewall.nft
+
+[Install]
+WantedBy=multi-user.target

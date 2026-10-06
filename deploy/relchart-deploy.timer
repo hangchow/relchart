@@ -1,0 +1,11 @@
+[Unit]
+Description=Check relchart main updates
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=relchart-deploy.service
+
+[Install]
+WantedBy=timers.target

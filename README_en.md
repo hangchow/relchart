@@ -159,3 +159,7 @@ writing the URL manually. The frontend already does this automatically for API r
 - Empty chart or request failure: check internet connectivity, stock code format, and the `stocks` query parameter in the URL
 - `YF.*` symbols are passed to Yahoo as-is; if Yahoo itself does not recognize the symbol, relchart cannot repair it locally
 - Port already in use: change `--web_port`
+
+## Deploy to Osaka
+
+See [deployment documentation](docs/deployment.md) for isolated releases, persistent caches, systemd services, automatic main updates, and rollback.

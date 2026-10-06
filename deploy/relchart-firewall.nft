@@ -1,0 +1,10 @@
+table inet relchart_guard
+delete table inet relchart_guard
+table inet relchart_guard {
+    chain input {
+        type filter hook input priority -10; policy accept;
+        tcp dport 80 iifname "lo" accept
+        tcp dport 80 iifname "enp9s0f0np0" ip saddr 192.168.10.0/24 ip daddr 192.168.10.1 accept
+        tcp dport 80 counter drop
+    }
+}

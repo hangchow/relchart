@@ -1,0 +1,25 @@
+[Unit]
+Description=Deploy relchart origin/main
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=relchart-deploy
+Group=relchart-deploy
+EnvironmentFile=/etc/relchart/relchart.env
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_DISABLE_PIP_VERSION_CHECK=1 GIT_TERMINAL_PROMPT=0
+Environment=PIP_CACHE_DIR=/var/lib/relchart-deploy/pip-cache XDG_CACHE_HOME=/var/lib/relchart-deploy/cache
+ExecStart=/usr/bin/python3 /usr/local/libexec/relchart/deploy.py update
+TimeoutStartSec=20min
+TimeoutStopSec=180s
+UMask=0022
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/opt/relchart /var/lib/relchart-deploy
+CPUQuota=100%
+MemoryHigh=1G
+MemoryMax=2G
+Nice=10
+IOSchedulingClass=idle
